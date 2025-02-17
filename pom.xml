@@ -93,12 +93,34 @@
 		</dependency>
 		<dependency>
 			<groupId>org.apache.camel.quarkus</groupId>
-			<artifactId>camel-quarkus-timer</artifactId>
+			<artifactId>camel-quarkus-direct</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.camel.quarkus</groupId>
-    		<artifactId>camel-quarkus-vertx-http</artifactId>
+			<artifactId>camel-quarkus-timer</artifactId>
 		</dependency>
+		<dependency>
+		    <groupId>org.apache.camel.quarkus</groupId>
+    		<artifactId>camel-quarkus-xpath</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.camel.quarkus</groupId>
+			<artifactId>camel-quarkus-log</artifactId>
+		</dependency>
+		<dependency>
+		    <groupId>org.apache.camel.quarkus</groupId>
+		    <artifactId>camel-quarkus-quartz</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.camel.quarkus</groupId>
+			<artifactId>camel-quarkus-controlbus</artifactId>
+		</dependency>
+		<dependency>
+		    <groupId>org.apache.camel.quarkus</groupId>
+		    <artifactId>camel-quarkus-http</artifactId>
+		</dependency>
+
+
 		<dependency>
 			<groupId>org.apache.camel.quarkus</groupId>
     		<artifactId>camel-quarkus-jackson</artifactId>
@@ -110,10 +132,6 @@
 		<dependency>
 			<groupId>org.apache.camel.quarkus</groupId>
 			<artifactId>camel-quarkus-bean</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.camel.quarkus</groupId>
-			<artifactId>camel-quarkus-log</artifactId>
 		</dependency>
 
 		<dependency>
@@ -132,6 +150,12 @@
 			<groupId>org.apache.camel.quarkus</groupId>
 			<artifactId>camel-quarkus-caffeine</artifactId>
 		</dependency>
+		
+		<dependency>
+            <groupId>org.seleniumhq.selenium</groupId>
+            <artifactId>selenium-java</artifactId>
+            <version>4.28.1</version>
+        </dependency>
 
 		<dependency>
 			<groupId>org.slf4j</groupId>
