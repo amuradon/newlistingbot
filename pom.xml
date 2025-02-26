@@ -119,6 +119,14 @@
 		    <groupId>org.apache.camel.quarkus</groupId>
 		    <artifactId>camel-quarkus-http</artifactId>
 		</dependency>
+		<dependency>
+			<groupId>org.apache.camel.quarkus</groupId>
+			<artifactId>camel-quarkus-vertx-websocket</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.camel.quarkus</groupId>
+			<artifactId>camel-quarkus-jsonpath</artifactId>
+		</dependency>
 
 
 		<dependency>
@@ -141,10 +149,6 @@
 		<dependency>
 			<groupId>org.apache.camel.quarkus</groupId>
 			<artifactId>camel-quarkus-seda</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.camel.quarkus</groupId>
-			<artifactId>camel-quarkus-jsonpath</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.camel.quarkus</groupId>
