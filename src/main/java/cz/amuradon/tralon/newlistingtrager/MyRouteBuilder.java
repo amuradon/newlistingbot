@@ -11,8 +11,8 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
 import org.apache.camel.LoggingLevel;
+import org.apache.camel.builder.TemplatedRouteBuilder;
 import org.apache.camel.builder.endpoint.EndpointRouteBuilder;
-import org.apache.camel.component.http.HttpComponent;
 import org.apache.camel.component.http.HttpConstants;
 import org.apache.camel.component.http.HttpMethods;
 import org.apache.camel.model.dataformat.JsonLibrary;
@@ -25,6 +25,14 @@ import jakarta.inject.Inject;
 @ApplicationScoped
 public class MyRouteBuilder extends EndpointRouteBuilder {
 	
+	private static final String SPOT_TRADE_UPDATES_CHANNEL_PREFIX = "spot@public.deals.v3.api@";
+
+	private static final String SPOT_DEPTH_UPDATES_CHANNEL_PREFIX = "spot@public.increase.depth.v3.api@";
+
+	private static final String SPOT_ACCOUNT_UPDATES_CHANNEL = "spot@private.account.v3.api";
+
+	private static final String SPOT_ORDER_UPDATES_CHANNEL = "spot@private.orders.v3.api";
+
 	public static final String SYMBOL_HEADER_NAME = "Symbol";
 	
 	public static final String EXCHANGE_INFO_HEADER_NAME = "ExchangeInfo";
@@ -33,20 +41,20 @@ public class MyRouteBuilder extends EndpointRouteBuilder {
 
 	private static final String DIRECT_PREPARE_BUY_ORDER_DATA = "direct:prepareBuyOrderData";
 
-	private static final String DIRECT_SUBSCRIBE_ORDER_BOOK_UPDATES = "direct:subscribeOrderBookUpdates";
-
-	private static final String DIRECT_SUBSCRIBE_TRADES = "direct:subscribeTrades";
-
-	private static final String DIRECT_SUBSCRIBE_BALANCE_UPDATES = "direct:subscribeBalanceUpdates";
+	private static final String DIRECT_SUBSCRIBE_WS_UPDATES = "direct:subscribeWsUpdates";
 	
 	private static final String HMAC_SHA256 = "HmacSHA256";
 	private static final String ACCESS_KEY = "mx0vgl5eTwQI22AEqq";
 	private static final String SECRET_KEY = "51c13954c8e043cd9215b9f32c8eaf86";
 
+	private static final String USER_DATA_STREAM = "UserDataStream";
+
     private final BigDecimal usdtVolume;
     private final String symbol;
     
 	private Mac mac;
+	
+	private String listenKey;
     
     @Inject
     public MyRouteBuilder(@ConfigProperty(name = "usdtVolume") final String usdtVolume,
@@ -82,9 +90,7 @@ public class MyRouteBuilder extends EndpointRouteBuilder {
 //    			localDate.getDayOfMonth(), localDate.getMonthValue(), localDate.getYear()))
 		from("timer:placeOrder?repeatCount=1")
 			.multicast()
-//				.to(DIRECT_SUBSCRIBE_TRADES)
-//				.to(DIRECT_SUBSCRIBE_ORDER_BOOK_UPDATES)
-				.to(DIRECT_SUBSCRIBE_BALANCE_UPDATES)
+				.to(DIRECT_SUBSCRIBE_WS_UPDATES)
 //				.to(DIRECT_PREPARE_BUY_ORDER_DATA)
 				;
 		
@@ -122,30 +128,13 @@ public class MyRouteBuilder extends EndpointRouteBuilder {
 			.to("https://api.mexc.com/api/v3/order")
 			.log("${body}");
 		
-		from("vertx-websocket:wss://wbs.mexc.com/ws?consumeAsClient=true")
-			.choice()
-				.when().jsonpath("$[?(@.c == 'spot@public.deals.v3.api@" + symbol + "')]")
-					.to("file:data/mexc/?fileName=${date:now:yyyyMMdd}/" + symbol + "/trades.json&fileExist=Append&appendChars=\\n")
-				.when().jsonpath("$[?(@.c == 'spot@public.increase.depth.v3.api@" + symbol + "')]")
-					.to("file:data/mexc/?fileName=${date:now:yyyyMMdd}/" + symbol + "/orderBookUpdates.json&fileExist=Append&appendChars=\\n")
-				.otherwise()
-					.log(LoggingLevel.ERROR, "No choice found");
-		
-		from(DIRECT_SUBSCRIBE_TRADES)
-			.setBody(constant("{ \"method\":\"SUBSCRIPTION\", \"params\":[\"spot@public.deals.v3.api@" + symbol + "\"] }"))
-			.to("vertx-websocket:wss://wbs.mexc.com/ws?consumeAsClient=true");
-		
-		from(DIRECT_SUBSCRIBE_ORDER_BOOK_UPDATES)
-			.setBody(constant("{ \"method\":\"SUBSCRIPTION\", \"params\":[\"spot@public.increase.depth.v3.api@" + symbol + "\"] }"))
-			.to("vertx-websocket:wss://wbs.mexc.com/ws?consumeAsClient=true");
-		
 		/*
 		 * TODO
 		 * - When application starts delete all existing listenKeys
 		 * - Every 60 minutes sent keep alive request
 		 * - After 24 hours reconnect - create a new listen key?
 		 */
-		from(DIRECT_SUBSCRIBE_BALANCE_UPDATES)
+		from(DIRECT_SUBSCRIBE_WS_UPDATES)
 			.setHeader("X-MEXC-APIKEY", constant(ACCESS_KEY))
 			.setHeader("Content-Type", constant("application/json"))
 			.setHeader(HttpConstants.HTTP_METHOD, constant(HttpMethods.POST))
@@ -157,7 +146,35 @@ public class MyRouteBuilder extends EndpointRouteBuilder {
     		})
 			.to("https://api.mexc.com/api/v3/userDataStream")
 			.setBody().jsonpath("$.listenKey")
-			.log("${body}");
+			.process(e -> {
+				TemplatedRouteBuilder.builder(e.getContext(), USER_DATA_STREAM)
+					.parameter("listenKey", e.getMessage().getBody(String.class))
+					.add();
+			})
+			.setHeader("listenKey").body()
+			.setBody(constant(
+					String.format("{ \"method\":\"SUBSCRIPTION\", \"params\":[\"%s\", \"%s\", \"%s\", \"%s\"] }",
+							SPOT_ACCOUNT_UPDATES_CHANNEL, SPOT_ORDER_UPDATES_CHANNEL,
+							SPOT_DEPTH_UPDATES_CHANNEL_PREFIX + symbol, SPOT_TRADE_UPDATES_CHANNEL_PREFIX + symbol)))
+			.toD("vertx-websocket:wss://wbs.mexc.com/ws?listenKey=${header.listenKey}&consumeAsClient=true");
+		
+		routeTemplate(USER_DATA_STREAM)
+			.templateParameter("listenKey")
+			.from("vertx-websocket:wss://wbs.mexc.com/ws?listenKey={{listenKey}}&consumeAsClient=true")
+			.filter().jsonpath("$.c")
+			.setHeader("channel").jsonpath("$.c")
+			.choice()
+				.when(header("channel").isEqualTo(SPOT_TRADE_UPDATES_CHANNEL_PREFIX + symbol))
+					.to("file:data/mexc/?fileName=${date:now:yyyyMMdd}/" + symbol + "/trades.json&fileExist=Append&appendChars=\\n")
+				.when(header("channel").isEqualTo(SPOT_DEPTH_UPDATES_CHANNEL_PREFIX + symbol))
+					.to("file:data/mexc/?fileName=${date:now:yyyyMMdd}/" + symbol + "/orderBookUpdates.json&fileExist=Append&appendChars=\\n")
+				.when(header("channel").isEqualTo(SPOT_ACCOUNT_UPDATES_CHANNEL))
+					.log("ACCOUNT: ${body}")
+				.when(header("channel").isEqualTo(SPOT_ORDER_UPDATES_CHANNEL))
+					.log("ORDERS: ${body}")
+				.otherwise()
+					.log(LoggingLevel.ERROR, "No WS processing route found ${header.channel}")
+			;
     }
 
 }
