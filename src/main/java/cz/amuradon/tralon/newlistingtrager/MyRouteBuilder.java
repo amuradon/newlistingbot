@@ -36,6 +36,8 @@ public class MyRouteBuilder extends EndpointRouteBuilder {
 	private static final String DIRECT_SUBSCRIBE_ORDER_BOOK_UPDATES = "direct:subscribeOrderBookUpdates";
 
 	private static final String DIRECT_SUBSCRIBE_TRADES = "direct:subscribeTrades";
+
+	private static final String DIRECT_SUBSCRIBE_BALANCE_UPDATES = "direct:subscribeBalanceUpdates";
 	
 	private static final String HMAC_SHA256 = "HmacSHA256";
 	private static final String ACCESS_KEY = "mx0vgl5eTwQI22AEqq";
@@ -80,9 +82,11 @@ public class MyRouteBuilder extends EndpointRouteBuilder {
 //    			localDate.getDayOfMonth(), localDate.getMonthValue(), localDate.getYear()))
 		from("timer:placeOrder?repeatCount=1")
 			.multicast()
-				.to(DIRECT_SUBSCRIBE_TRADES)
-				.to(DIRECT_SUBSCRIBE_ORDER_BOOK_UPDATES)
-				.to(DIRECT_PREPARE_BUY_ORDER_DATA);
+//				.to(DIRECT_SUBSCRIBE_TRADES)
+//				.to(DIRECT_SUBSCRIBE_ORDER_BOOK_UPDATES)
+				.to(DIRECT_SUBSCRIBE_BALANCE_UPDATES)
+//				.to(DIRECT_PREPARE_BUY_ORDER_DATA)
+				;
 		
 		from(DIRECT_PREPARE_BUY_ORDER_DATA)
 			.setHeader(SYMBOL_HEADER_NAME).constant(symbol)
@@ -135,6 +139,25 @@ public class MyRouteBuilder extends EndpointRouteBuilder {
 			.setBody(constant("{ \"method\":\"SUBSCRIPTION\", \"params\":[\"spot@public.increase.depth.v3.api@" + symbol + "\"] }"))
 			.to("vertx-websocket:wss://wbs.mexc.com/ws?consumeAsClient=true");
 		
+		/*
+		 * TODO
+		 * - When application starts delete all existing listenKeys
+		 * - Every 60 minutes sent keep alive request
+		 * - After 24 hours reconnect - create a new listen key?
+		 */
+		from(DIRECT_SUBSCRIBE_BALANCE_UPDATES)
+			.setHeader("X-MEXC-APIKEY", constant(ACCESS_KEY))
+			.setHeader("Content-Type", constant("application/json"))
+			.setHeader(HttpConstants.HTTP_METHOD, constant(HttpMethods.POST))
+			.setHeader(HttpConstants.HTTP_QUERY).exchange(e -> {
+    			long timestamp = new Date().getTime();
+    			String query = "timestamp=" + timestamp;
+    			String signature = Hex.encodeHexString(mac.doFinal(query.getBytes()));
+    			return query + "&signature=" + signature;
+    		})
+			.to("https://api.mexc.com/api/v3/userDataStream")
+			.setBody().jsonpath("$.listenKey")
+			.log("${body}");
     }
 
 }
