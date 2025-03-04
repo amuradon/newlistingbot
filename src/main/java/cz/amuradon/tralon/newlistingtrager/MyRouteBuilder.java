@@ -5,6 +5,7 @@ import java.math.RoundingMode;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Date;
 
 import javax.crypto.Mac;
@@ -19,12 +20,15 @@ import org.apache.camel.model.dataformat.JsonLibrary;
 import org.apache.commons.codec.binary.Hex;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 @ApplicationScoped
 public class MyRouteBuilder extends EndpointRouteBuilder {
 	
+	private static final String TIME_PROP_NAME = "time";
+
 	private static final String SPOT_TRADE_UPDATES_CHANNEL_PREFIX = "spot@public.deals.v3.api@";
 
 	private static final String SPOT_DEPTH_UPDATES_CHANNEL_PREFIX = "spot@public.increase.depth.v3.api@";
@@ -51,12 +55,39 @@ public class MyRouteBuilder extends EndpointRouteBuilder {
 
     private final BigDecimal usdtVolume;
     private final String symbol;
+    private final int startHour;
+    private final int startMinute;
     
 	private Mac mac;
 	
+	private BigDecimal price;
+	
     @Inject
     public MyRouteBuilder(@ConfigProperty(name = "usdtVolume") final String usdtVolume,
-    		@ConfigProperty(name = "symbol") final String symbol) {
+    		@ConfigProperty(name = "symbol") final String symbol,
+    		@ConfigProperty(name = TIME_PROP_NAME) final String time) {
+    	
+    	String[] timeParts = time.split(":");
+    	if (timeParts.length >= 2) {
+    		int hour = Integer.parseInt(timeParts[0]);
+    		int minute = Integer.parseInt(timeParts[1]);
+    		
+    		if (minute == 0) {
+    			hour--;
+    			minute = 59;
+    		} else {
+    			minute--;
+    		}
+
+    		startHour = hour;
+    		startMinute = minute;
+    		Log.infof("Start scheduled on %d:%d", startHour, startMinute);
+    	} else {
+    		throw new IllegalArgumentException(
+    				String.format("The property '%s' has invalid value '%s'. The expected format is HH:mm",
+    						TIME_PROP_NAME, time));
+    	}
+    	
     	this.usdtVolume = new BigDecimal(usdtVolume);
     	this.symbol = symbol;
     	SecretKeySpec secretKey = new SecretKeySpec(SECRET_KEY.getBytes(), HMAC_SHA256);
@@ -84,7 +115,8 @@ public class MyRouteBuilder extends EndpointRouteBuilder {
     	
 		
 		LocalDate localDate = LocalDate.now();
-    	from(String.format("quartz:startListing?cron=50+59+13+%d+%d+?+%d",
+    	from(String.format("quartz:startListing?cron=50+%d+%d+%d+%d+?+%d",
+    			startMinute, startHour,
     			localDate.getDayOfMonth(), localDate.getMonthValue(), localDate.getYear()))
 //		from("timer:placeOrder?repeatCount=1")
 			.multicast()
@@ -109,18 +141,22 @@ public class MyRouteBuilder extends EndpointRouteBuilder {
     		.bean(ComputeInitialPrice.BEAN_NAME)
     		.log("Computed buy limit order price: ${body}")
     		.removeHeader(EXCHANGE_INFO_HEADER_NAME)
-    		.to(DIRECT_PLACE_NEW_ORDER)
+    		.process().body(BigDecimal.class, p -> price = p)
+//    		.to(DIRECT_PLACE_NEW_ORDER)
     		;
     	
 		// FIXME timestamp neni aktualizovan a vyskoci z default recvWindow = 5s
-    	from(DIRECT_PLACE_NEW_ORDER)
-    		.errorHandler(defaultErrorHandler().maximumRedeliveries(100).redeliveryDelay(200))
+		from(String.format("quartz:placeOrder?cron=58+%d+%d+%d+%d+?+%d",
+    			startMinute, startHour,
+    			localDate.getDayOfMonth(), localDate.getMonthValue(), localDate.getYear()))
+//    	from(DIRECT_PLACE_NEW_ORDER)
+    		.errorHandler(defaultErrorHandler().maximumRedeliveries(1000).redeliveryDelay(0))
     		.setHeader("X-MEXC-APIKEY", constant(ACCESS_KEY))
     		.setHeader("Content-Type", constant("application/json"))
     		.setHeader(HttpConstants.HTTP_METHOD, constant(HttpMethods.POST))
     		.setHeader(HttpConstants.HTTP_QUERY).exchange(e -> {
-    			BigDecimal price = e.getMessage().getBody(BigDecimal.class);
     			long timestamp = new Date().getTime();
+    			System.out.println("### PRICE " + price);
     			String query = "symbol=" + symbol + "&side=BUY&type=LIMIT&quantity="
     					+ usdtVolume.divide(price, 2, RoundingMode.HALF_UP) + "&price=" + price.toPlainString()
     					+ "&timestamp=" + timestamp + "&recvWindow=20000";
