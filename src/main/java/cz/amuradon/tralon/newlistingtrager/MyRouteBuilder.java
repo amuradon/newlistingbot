@@ -54,8 +54,6 @@ public class MyRouteBuilder extends EndpointRouteBuilder {
     
 	private Mac mac;
 	
-	private String listenKey;
-    
     @Inject
     public MyRouteBuilder(@ConfigProperty(name = "usdtVolume") final String usdtVolume,
     		@ConfigProperty(name = "symbol") final String symbol) {
@@ -86,12 +84,12 @@ public class MyRouteBuilder extends EndpointRouteBuilder {
     	
 		
 		LocalDate localDate = LocalDate.now();
-//    	from(String.format("quartz:startListing?cron=57+09+16+%d+%d+?+%d",
-//    			localDate.getDayOfMonth(), localDate.getMonthValue(), localDate.getYear()))
-		from("timer:placeOrder?repeatCount=1")
+    	from(String.format("quartz:startListing?cron=50+59+13+%d+%d+?+%d",
+    			localDate.getDayOfMonth(), localDate.getMonthValue(), localDate.getYear()))
+//		from("timer:placeOrder?repeatCount=1")
 			.multicast()
 				.to(DIRECT_SUBSCRIBE_WS_UPDATES)
-//				.to(DIRECT_PREPARE_BUY_ORDER_DATA)
+				.to(DIRECT_PREPARE_BUY_ORDER_DATA)
 				;
 		
 		from(DIRECT_PREPARE_BUY_ORDER_DATA)
@@ -99,19 +97,24 @@ public class MyRouteBuilder extends EndpointRouteBuilder {
 			.multicast(new HttpRequestsAggregationStrategy(), true)
 				.pipeline()
 					.to("https://api.mexc.com/api/v3/exchangeInfo?symbol=" + symbol)
+					.to("file:data/mexc/?fileName=${date:now:yyyyMMdd}/" + symbol + "/exchangeInfo.json")
 					.unmarshal().json(JsonLibrary.Jackson, ExchangeInfo.class)
 				.end()
 				.pipeline()
 					.to("https://api.mexc.com/api/v3/depth?symbol=" + symbol + "&limit=5000")
+					.to("file:data/mexc/?fileName=${date:now:yyyyMMdd}/" + symbol + "/depth.json")
 					.unmarshal().json(JsonLibrary.Jackson, OrderBook.class)
 				.end()
 			.end()
     		.bean(ComputeInitialPrice.BEAN_NAME)
+    		.log("Computed buy limit order price: ${body}")
     		.removeHeader(EXCHANGE_INFO_HEADER_NAME)
-    		.to(DIRECT_PLACE_NEW_ORDER);
+    		.to(DIRECT_PLACE_NEW_ORDER)
+    		;
     	
+		// FIXME timestamp neni aktualizovan a vyskoci z default recvWindow = 5s
     	from(DIRECT_PLACE_NEW_ORDER)
-    		.errorHandler(defaultErrorHandler().maximumRedeliveries(50).redeliveryDelay(200))
+    		.errorHandler(defaultErrorHandler().maximumRedeliveries(100).redeliveryDelay(200))
     		.setHeader("X-MEXC-APIKEY", constant(ACCESS_KEY))
     		.setHeader("Content-Type", constant("application/json"))
     		.setHeader(HttpConstants.HTTP_METHOD, constant(HttpMethods.POST))
@@ -120,7 +123,7 @@ public class MyRouteBuilder extends EndpointRouteBuilder {
     			long timestamp = new Date().getTime();
     			String query = "symbol=" + symbol + "&side=BUY&type=LIMIT&quantity="
     					+ usdtVolume.divide(price, 2, RoundingMode.HALF_UP) + "&price=" + price.toPlainString()
-    					+ "&timestamp=" + timestamp;
+    					+ "&timestamp=" + timestamp + "&recvWindow=20000";
     			String signature = Hex.encodeHexString(mac.doFinal(query.getBytes()));
     			return query + "&signature=" + signature;
     		})
@@ -161,7 +164,7 @@ public class MyRouteBuilder extends EndpointRouteBuilder {
 		routeTemplate(USER_DATA_STREAM)
 			.templateParameter("listenKey")
 			.from("vertx-websocket:wss://wbs.mexc.com/ws?listenKey={{listenKey}}&consumeAsClient=true")
-			.filter().jsonpath("$.c")
+			.filter().jsonpath("$[?(@.c)]")
 			.setHeader("channel").jsonpath("$.c")
 			.choice()
 				.when(header("channel").isEqualTo(SPOT_TRADE_UPDATES_CHANNEL_PREFIX + symbol))
@@ -169,9 +172,11 @@ public class MyRouteBuilder extends EndpointRouteBuilder {
 				.when(header("channel").isEqualTo(SPOT_DEPTH_UPDATES_CHANNEL_PREFIX + symbol))
 					.to("file:data/mexc/?fileName=${date:now:yyyyMMdd}/" + symbol + "/orderBookUpdates.json&fileExist=Append&appendChars=\\n")
 				.when(header("channel").isEqualTo(SPOT_ACCOUNT_UPDATES_CHANNEL))
+					// TODO push sell orders
 					.log("ACCOUNT: ${body}")
-				.when(header("channel").isEqualTo(SPOT_ORDER_UPDATES_CHANNEL))
-					.log("ORDERS: ${body}")
+					// TODO aggregate to not push each partial fill? Is it necessary? There is usually huge pump
+//				.when(header("channel").isEqualTo(SPOT_ORDER_UPDATES_CHANNEL))
+//					.log("ORDERS: ${body}")
 				.otherwise()
 					.log(LoggingLevel.ERROR, "No WS processing route found ${header.channel}")
 			;

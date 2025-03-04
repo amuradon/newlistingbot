@@ -18,8 +18,8 @@ import cz.amuradon.tralon.newlistingtrager.SymbolInfo;
 public class ComputeInitialPriceTest {
 
 	@Test
-	public void test() {
-		ComputeInitialPrice compute = new ComputeInitialPrice("20.0");
+	public void testSlippage() {
+		ComputeInitialPrice compute = new ComputeInitialPrice("slippage:20.0");
 		List<List<BigDecimal>> asks = new ArrayList<>();
 		asks.add(Lists.newArrayList(new BigDecimal("0.3"), new BigDecimal("5")));
 		asks.add(Lists.newArrayList(new BigDecimal("0.35"), new BigDecimal("20")));
@@ -31,5 +31,12 @@ public class ComputeInitialPriceTest {
 						new SymbolInfo("VPTUSDT", "VPT", "USDT", 1, true, 2, 6, 6))),
 				orderBook);
 		Assertions.assertEquals(new BigDecimal("0.408000"), result);
+	}
+	
+	@Test
+	public void testFixed() {
+		ComputeInitialPrice compute = new ComputeInitialPrice("fixed:0.00125");
+		BigDecimal result = compute.execute("VPTUSDT", null, null);
+		Assertions.assertEquals(new BigDecimal("0.00125"), result);
 	}
 }
