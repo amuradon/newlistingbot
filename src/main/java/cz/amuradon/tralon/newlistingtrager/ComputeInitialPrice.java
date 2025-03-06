@@ -20,23 +20,23 @@ import jakarta.inject.Named;
 @RegisterForReflection
 public class ComputeInitialPrice {
 
-	private static final String BUY_ORDER_LIMIT_PRICE_PROP_NAME = "buyOrderLimitPrice";
+	public static final String BUY_ORDER_LIMIT_PRICE_PROP_NAME = "buyOrderPrice";
 
 	public static final String BEAN_NAME = "computeInitialPrice";
 	
-	private final String buyOrderLimitPriceProperty;
+	private final String buyOrderPriceProperty;
 	
 	@Inject
-	public ComputeInitialPrice(@ConfigProperty(name = BUY_ORDER_LIMIT_PRICE_PROP_NAME) final String buyOrderLimitPriceProperty) {
-		this.buyOrderLimitPriceProperty = buyOrderLimitPriceProperty;
+	public ComputeInitialPrice(@ConfigProperty(name = BUY_ORDER_LIMIT_PRICE_PROP_NAME) final String buyOrderPriceProperty) {
+		this.buyOrderPriceProperty = buyOrderPriceProperty;
 	}
 	
 	@Handler
 	public BigDecimal execute(@Header(MyRouteBuilder.SYMBOL_HEADER_NAME) String symbol,
 			@Header(MyRouteBuilder.EXCHANGE_INFO_HEADER_NAME) ExchangeInfo exchangeInfo,
 			@Body OrderBook orderBook) {
-		if (buyOrderLimitPriceProperty.startsWith("slippage")) {
-			String slippage = extractValue(buyOrderLimitPriceProperty);
+		if (buyOrderPriceProperty.startsWith("slippage")) {
+			String slippage = extractValue(buyOrderPriceProperty);
 			int priceScale = 4;
 			for (SymbolInfo symbolInfo: exchangeInfo.symbols()) {
 				if (symbolInfo.symbol().equalsIgnoreCase(symbol)) {
@@ -72,12 +72,14 @@ public class ComputeInitialPrice {
 			} else {
 				return BigDecimal.ZERO;
 			}
-		} else if (buyOrderLimitPriceProperty.startsWith("fixed")) {
-			return new BigDecimal(extractValue(buyOrderLimitPriceProperty));
+		} else if (buyOrderPriceProperty.startsWith("fixed")) {
+			return new BigDecimal(extractValue(buyOrderPriceProperty));
+		} else if (buyOrderPriceProperty.startsWith("market")) {
+			return BigDecimal.ZERO;
 		} else {
-			if (!buyOrderLimitPriceProperty.equalsIgnoreCase("auto")) {
+			if (!buyOrderPriceProperty.equalsIgnoreCase("auto")) {
 				Log.errorf("The property '%s' has invalid value '%s'. Defaulting to 'auto'",
-						BUY_ORDER_LIMIT_PRICE_PROP_NAME, buyOrderLimitPriceProperty);
+						BUY_ORDER_LIMIT_PRICE_PROP_NAME, buyOrderPriceProperty);
 			}
 			// TODO auto-computation
 			return BigDecimal.ZERO;
