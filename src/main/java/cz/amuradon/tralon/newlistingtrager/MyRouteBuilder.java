@@ -56,6 +56,8 @@ public class MyRouteBuilder extends EndpointRouteBuilder {
 	private final String buyOrderPriceProperty;
 
     private final BigDecimal usdtVolume;
+    private final String baseAsset;
+    private final String quoteAsset;
     private final String symbol;
     private final int startHour;
     private final int startMinute;
@@ -66,9 +68,16 @@ public class MyRouteBuilder extends EndpointRouteBuilder {
 
 	@Inject
     public MyRouteBuilder(@ConfigProperty(name = "usdtVolume") final String usdtVolume,
-    		@ConfigProperty(name = "symbol") final String symbol,
+    		@ConfigProperty(name = "baseAsset") final String baseAsset,
+    		@ConfigProperty(name = "quoteAsset") final String quoteAsset,
     		@ConfigProperty(name = TIME_PROP_NAME) final String time,
     		@ConfigProperty(name = ComputeInitialPrice.BUY_ORDER_LIMIT_PRICE_PROP_NAME) final String buyOrderPriceProperty) {
+    	
+    	this.usdtVolume = new BigDecimal(usdtVolume);
+    	this.baseAsset = baseAsset;
+    	this.quoteAsset = quoteAsset;
+    	this.symbol = baseAsset + quoteAsset;
+    	this.buyOrderPriceProperty = buyOrderPriceProperty;
     	
     	String[] timeParts = time.split(":");
     	if (timeParts.length >= 2) {
@@ -90,11 +99,8 @@ public class MyRouteBuilder extends EndpointRouteBuilder {
     				String.format("The property '%s' has invalid value '%s'. The expected format is HH:mm",
     						TIME_PROP_NAME, time));
     	}
-    	
-    	this.usdtVolume = new BigDecimal(usdtVolume);
-    	this.symbol = symbol;
-    	this.buyOrderPriceProperty = buyOrderPriceProperty;
     	SecretKeySpec secretKey = new SecretKeySpec(SECRET_KEY.getBytes(), HMAC_SHA256);
+    
 		try {
 			mac = Mac.getInstance(HMAC_SHA256);
 			mac.init(secretKey);
@@ -149,13 +155,20 @@ public class MyRouteBuilder extends EndpointRouteBuilder {
     	
 		// TODO kdyz price jeste neni nasetovana routou vyse - muze se stat, je to async
 		// FIXME timestamp neni aktualizovan a vyskoci z default recvWindow = 5s
-		from(String.format("quartz:placeOrder?cron=58+%d+%d+%d+%d+?+%d",
+		from(String.format("quartz:placeOrder?cron=59+%d+%d+%d+%d+?+%d",
     			startMinute, startHour,
     			localDate.getDayOfMonth(), localDate.getMonthValue(), localDate.getYear()))
 			// FIXME redelivery delay 0 se zda ze pouzije default 1000 - logovat pokusy
+			//   - divne chovani toho retry, potrebuji to logovat
 			// TODO reagovat na ruzne chyby, napr. too many requests, nepovoleni buy order s vyssi cenou nez napr. 0.5
-    		.errorHandler(defaultErrorHandler().maximumRedeliveries(1000).redeliveryDelay(1).logRetryAttempted(true)
-    				.log("Buy-order-retry").logExhausted(true).logExhaustedMessageBody(true))
+    		.errorHandler(defaultErrorHandler()
+    				.maximumRedeliveries(10)
+    				.redeliveryDelay(1)
+    				.logRetryAttempted(true)
+    				.log(MyRouteBuilder.class)
+    				.loggingLevel(LoggingLevel.INFO)
+    				.retryAttemptedLogLevel(LoggingLevel.INFO))
+    		.delay(950)
     		.setHeader("X-MEXC-APIKEY", constant(ACCESS_KEY))
     		.setHeader("Content-Type", constant("application/json"))
     		.setHeader(HttpConstants.HTTP_METHOD, constant(HttpMethods.POST))

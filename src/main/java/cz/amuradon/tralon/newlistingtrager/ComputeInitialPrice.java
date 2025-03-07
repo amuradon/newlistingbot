@@ -72,7 +72,7 @@ public class ComputeInitialPrice {
 			} else {
 				return BigDecimal.ZERO;
 			}
-		} else if (buyOrderPriceProperty.startsWith("fixed")) {
+		} else if (buyOrderPriceProperty.startsWith("manual")) {
 			return new BigDecimal(extractValue(buyOrderPriceProperty));
 		} else if (buyOrderPriceProperty.startsWith("market")) {
 			return BigDecimal.ZERO;

@@ -35,7 +35,7 @@ public class ComputeInitialPriceTest {
 	
 	@Test
 	public void testFixed() {
-		ComputeInitialPrice compute = new ComputeInitialPrice("fixed:0.00125");
+		ComputeInitialPrice compute = new ComputeInitialPrice("manual:0.00125");
 		BigDecimal result = compute.execute("VPTUSDT", null, null);
 		Assertions.assertEquals(new BigDecimal("0.00125"), result);
 	}
