@@ -65,6 +65,8 @@ public class MyRouteBuilder extends EndpointRouteBuilder {
 	private Mac mac;
 	
 	private BigDecimal price;
+	
+	private String buyOrderId;
 
 	@Inject
     public MyRouteBuilder(@ConfigProperty(name = "usdtVolume") final String usdtVolume,
@@ -115,15 +117,6 @@ public class MyRouteBuilder extends EndpointRouteBuilder {
     
 	@Override
     public void configure() throws Exception {
-		// Scanning of new listings
-//        from("timer:getDataMexcRest?period=10000&fixedRate=true")
-//            .to("https://api.mexc.com/api/v3/exchangeInfo")
-//            .unmarshal().json(JsonLibrary.Jackson, ExchangeInfo.class)
-////            .split(bodyAs(ExchangeInfo.class).method("symbols"))
-////            .filter().body(SymbolInfo.class, s -> s.status() == 2 && !s.isSpotTradingAllowed())
-//            .bean(GetNewListings.class, "getNewListings");
-    	
-		
 		LocalDate localDate = LocalDate.now();
 //		from("timer:placeOrder?repeatCount=1")
     	from(String.format("quartz:startListing?cron=50+%d+%d+%d+%d+?+%d",
@@ -154,12 +147,9 @@ public class MyRouteBuilder extends EndpointRouteBuilder {
     		.process().body(BigDecimal.class, p -> price = p);
     	
 		// TODO kdyz price jeste neni nasetovana routou vyse - muze se stat, je to async
-		// FIXME timestamp neni aktualizovan a vyskoci z default recvWindow = 5s
 		from(String.format("quartz:placeOrder?cron=59+%d+%d+%d+%d+?+%d",
     			startMinute, startHour,
     			localDate.getDayOfMonth(), localDate.getMonthValue(), localDate.getYear()))
-			// FIXME redelivery delay 0 se zda ze pouzije default 1000 - logovat pokusy
-			//   - divne chovani toho retry, potrebuji to logovat
 			// TODO reagovat na ruzne chyby, napr. too many requests, nepovoleni buy order s vyssi cenou nez napr. 0.5
     		.errorHandler(defaultErrorHandler()
     				.maximumRedeliveries(10)
@@ -184,14 +174,17 @@ public class MyRouteBuilder extends EndpointRouteBuilder {
     			}
     			queryBuilder.append("&symbol=").append(symbol)
     				.append("&side=BUY")
-    				.append("&timestamp=").append(timestamp)
-    				.append("&recvWindow=20000");
+    				.append("&timestamp=").append(timestamp);
     			String signature = Hex.encodeHexString(mac.doFinal(queryBuilder.toString().getBytes()));
     			return queryBuilder.append("&signature=").append(signature).toString();
     		})
     		.setBody().constant(null)
+    		.log(LoggingLevel.DEBUG, "New order request: ${body}")
 			.to("https://api.mexc.com/api/v3/order")
-			.log("${body}");
+			.log(LoggingLevel.DEBUG, "New order response: ${body}")
+			.unmarshal().json(JsonLibrary.Jackson, OrderResponse.class)
+			.log("New order: ${body}")
+			.process().body(OrderResponse.class, r -> buyOrderId = r.orderId());
 		
 		/*
 		 * TODO

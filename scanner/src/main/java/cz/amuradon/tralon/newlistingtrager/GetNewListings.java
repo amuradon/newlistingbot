@@ -9,9 +9,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import org.apache.camel.Body;
+import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.openqa.selenium.By;
 import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebDriver;
@@ -22,16 +26,19 @@ import org.openqa.selenium.support.ui.FluentWait;
 import org.openqa.selenium.support.ui.Wait;
 
 import io.quarkus.logging.Log;
-import io.quarkus.runtime.annotations.RegisterForReflection;
+import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
 
 @ApplicationScoped
-@RegisterForReflection
 public class GetNewListings {
 
-	private final ChromeDriver driver;
-	
 	private final SimpleDateFormat simpleDateFormat;
+	
+	private final ScheduledExecutorService scheduler;
+	
+	private final MexcClient mexcClient;
+	
+	private final ChromeDriver driver;
 	
 	private final Wait<WebDriver> wait;
 	
@@ -39,9 +46,11 @@ public class GetNewListings {
 	
 	private final Set<String> blackListedTokens;
 	
-	public GetNewListings() {
-		driver = new ChromeDriver();
+	public GetNewListings(@RestClient final MexcClient mexcClient) {
 		simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
+		scheduler = Executors.newScheduledThreadPool(1);
+		this.mexcClient = mexcClient;
+		driver = new ChromeDriver();
 		wait = new FluentWait<WebDriver>(driver).withTimeout(Duration.ofSeconds(10));
 		reportedTokens = new HashSet<>();
 		blackListedTokens = new HashSet<>();
@@ -55,10 +64,26 @@ public class GetNewListings {
 	 *   	- Napr BLEND na Educhain tam neni
 	 * - Sbirat trade a order book data v prvnich x minutach
 	 */
-	public void getNewListings(@Body ExchangeInfo exchangeInfo) {
+	@Startup
+	public void run() {
+		ScheduledFuture<?> task = scheduler.scheduleAtFixedRate(this::process, 0, 5, TimeUnit.MINUTES);
+
+		try {
+			task.get();
+		} catch (Exception e) {
+			throw new RuntimeException("The execution failed", e);
+		}
+	}
+	
+	
+	private void process() {
+		ExchangeInfo exchangeInfo = mexcClient.exchangeInfo();
+		Log.debugf("Exchange info: %s", exchangeInfo);
+		
 		final Set<String> newTokens = exchangeInfo.symbols().stream()
 				.filter(s -> s.status() == 2 && !s.isSpotTradingAllowed()).map(s -> s.baseAsset())
 				.collect(Collectors.toSet());
+		Log.debugf("Filtered: %s", newTokens);
 		newTokens.removeAll(reportedTokens);
 		newTokens.removeAll(blackListedTokens);
 		
@@ -76,8 +101,9 @@ public class GetNewListings {
 				listings.add(new NewListing(baseToken, timestamp, online));
 			}
 		} catch (ParseException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			Log.error("The date could be parsed", e);
+		} catch (TimeoutException e) {
+			// No need to do anything - listings remains empty
 		}
 		
 		for (NewListing newListing : listings) {
@@ -115,6 +141,9 @@ public class GetNewListings {
 				}
 			}
 		}
+		
+		Log.debugf("Reported: %s", reportedTokens);
+		Log.debugf("Blacklisted: %s", blackListedTokens);
 	}
 	
 	
