@@ -1,12 +1,9 @@
-package cz.amuradon.tralon.newlistingtrager;
+package cz.amuradon.tralon.newlisting.trader;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
 
-import org.apache.camel.Body;
-import org.apache.camel.Handler;
-import org.apache.camel.Header;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import io.quarkus.logging.Log;
@@ -31,10 +28,9 @@ public class ComputeInitialPrice {
 		this.buyOrderPriceProperty = buyOrderPriceProperty;
 	}
 	
-	@Handler
-	public BigDecimal execute(@Header(MyRouteBuilder.SYMBOL_HEADER_NAME) String symbol,
-			@Header(MyRouteBuilder.EXCHANGE_INFO_HEADER_NAME) ExchangeInfo exchangeInfo,
-			@Body OrderBook orderBook) {
+	public BigDecimal execute(String symbol,
+			ExchangeInfo exchangeInfo,
+			OrderBook orderBook) {
 		if (buyOrderPriceProperty.startsWith("slippage")) {
 			String slippage = extractValue(buyOrderPriceProperty);
 			int priceScale = 4;

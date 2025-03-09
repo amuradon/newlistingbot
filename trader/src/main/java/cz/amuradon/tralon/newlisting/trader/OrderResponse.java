@@ -1,11 +1,9 @@
-package cz.amuradon.tralon.newlistingtrager;
-
-import java.util.List;
+package cz.amuradon.tralon.newlisting.trader;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record ExchangeInfo(@JsonProperty("symbols") List<SymbolInfo> symbols) {
+public record OrderResponse(@JsonProperty("orderId") String orderId) {
 
 }

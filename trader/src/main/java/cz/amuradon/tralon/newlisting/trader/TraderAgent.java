@@ -1,0 +1,262 @@
+package cz.amuradon.tralon.newlisting.trader;
+
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpRequest.BodyPublisher;
+import java.net.http.HttpRequest.BodyPublishers;
+import java.net.http.HttpRequest.Builder;
+import java.net.http.HttpResponse;
+import java.net.http.HttpResponse.BodyHandlers;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HexFormat;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.StringJoiner;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+
+import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.eclipse.microprofile.rest.client.inject.RestClient;
+import org.jboss.resteasy.reactive.RestResponse;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.quarkus.logging.Log;
+import io.quarkus.runtime.Startup;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import jakarta.inject.Named;
+
+@ApplicationScoped
+public class TraderAgent {
+	
+	private static final String TIME_PROP_NAME = "time";
+
+	public static final String SYMBOL_HEADER_NAME = "Symbol";
+	
+	public static final String EXCHANGE_INFO_HEADER_NAME = "ExchangeInfo";
+	
+	private static final String DIRECT_PLACE_NEW_ORDER = "direct:placeNewOrder";
+
+	private static final String DIRECT_PREPARE_BUY_ORDER_DATA = "direct:prepareBuyOrderData";
+
+	private static final String DIRECT_SUBSCRIBE_WS_UPDATES = "direct:subscribeWsUpdates";
+	
+	private static final String HMAC_SHA256 = "HmacSHA256";
+
+	private static final String USER_DATA_STREAM = "UserDataStream";
+	
+
+	private final ScheduledExecutorService scheduler;
+	
+	private final MexcClient mexcClient;
+	
+	private final MexcWsClient mexcWsClient;
+	
+	private final ComputeInitialPrice computeInitialPrice;
+	
+	private final String secretKey;
+	
+	private final String buyOrderPriceProperty;
+
+    private final BigDecimal usdtVolume;
+    private final String symbol;
+    private final String time;
+    private final ObjectMapper mapper;
+    
+    private final Path dataDir;
+    
+	private Mac mac;
+	
+	private BigDecimal price;
+	
+	private String buyOrderId;
+
+	@Inject
+    public TraderAgent(
+    		@RestClient final MexcClient mexcClient,
+    		final MexcWsClient mexcWsClient,
+    		final ComputeInitialPrice computeInitialPrice,
+    		@ConfigProperty(name = "mexc.secretKey") final String secretKey,
+    		@ConfigProperty(name = "usdtVolume") final String usdtVolume,
+    		@Named(BeanConfig.SYMBOL) final String symbol,
+    		@ConfigProperty(name = TIME_PROP_NAME) final String time,
+    		@ConfigProperty(name = ComputeInitialPrice.BUY_ORDER_LIMIT_PRICE_PROP_NAME) final String buyOrderPriceProperty,
+    		@Named(BeanConfig.DATA_DIR) final Path dataDir) {
+    	
+		scheduler = Executors.newScheduledThreadPool(2);
+		this.mexcClient = mexcClient;
+		this.mexcWsClient = mexcWsClient;
+		this.computeInitialPrice = computeInitialPrice;
+		this.secretKey = secretKey;
+    	this.usdtVolume = new BigDecimal(usdtVolume);
+    	this.symbol = symbol;
+    	this.time = time;
+    	this.buyOrderPriceProperty = buyOrderPriceProperty;
+    	this.dataDir = dataDir;
+    	this.mapper = new ObjectMapper();
+    	
+		try {
+			mac = Mac.getInstance(HMAC_SHA256);
+			mac.init(new SecretKeySpec(secretKey.getBytes(), HMAC_SHA256));
+		} catch (NoSuchAlgorithmException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (InvalidKeyException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+    }
+    
+//	@Startup
+    public void run() {
+		int startHour;
+		int startMinute;
+		String[] timeParts = time.split(":");
+    	if (timeParts.length >= 2) {
+    		int hour = Integer.parseInt(timeParts[0]);
+    		int minute = Integer.parseInt(timeParts[1]);
+    		
+    		if (minute == 0) {
+    			hour--;
+    			minute = 59;
+    		} else {
+    			minute--;
+    		}
+
+    		startHour = hour;
+    		startMinute = minute;
+    		Log.infof("Start scheduled on %d:%d", startHour, startMinute);
+    	} else {
+    		throw new IllegalArgumentException(
+    				String.format("The property '%s' has invalid value '%s'. The expected format is HH:mm",
+    						TIME_PROP_NAME, time));
+    	}
+		
+		LocalDateTime start = LocalDateTime.now().withHour(startHour).withMinute(startMinute);
+		Log.infof("Listing start: %s", start);
+		LocalDateTime now = LocalDateTime.now();
+		
+		scheduler.schedule(this::prepare, now.withSecond(50).until(start, ChronoUnit.SECONDS), TimeUnit.SECONDS);
+		scheduler.schedule(this::placeNewBuyOrder, now.withSecond(59).until(start, ChronoUnit.SECONDS), TimeUnit.SECONDS);
+	}
+	
+    @Startup
+	public void prepare() {
+		/*
+		 * TODO
+		 * - When application starts delete all existing listenKeys
+		 *   - I can't there might be more agents running at the same time
+		 * - Every 60 minutes sent keep alive request
+		 * - After 24 hours reconnect - create a new listen key?
+		 */
+		
+		// subscribe updates
+		long timestamp = new Date().getTime();
+		
+		Map<String, String> queryParams = new LinkedHashMap<>();
+		queryParams.put("timestamp", String.valueOf(timestamp));
+		
+		ListenKey listenKey = mexcClient.userDataStream(signQueryParams(queryParams));
+		mexcWsClient.connect(listenKey.listenKey());
+		
+		// get order book
+		String exchangeInfoJson = mexcClient.exchangeInfo();
+		String orderBookJson= mexcClient.depth(symbol);
+
+		try {
+			Files.writeString(dataDir.resolve("exchangeInfo.json"), exchangeInfoJson, StandardOpenOption.CREATE);
+			Files.writeString(dataDir.resolve("depth.json"), orderBookJson, StandardOpenOption.CREATE);
+		} catch (IOException e) {
+			throw new IllegalStateException("Could write JSON to files", e);
+		}
+		
+
+		try {
+			ExchangeInfo exchangeInfo = mapper.readValue(exchangeInfoJson, ExchangeInfo.class);
+			OrderBook orderBook = mapper.readValue(orderBookJson, OrderBook.class);
+			
+			price = computeInitialPrice.execute(symbol, exchangeInfo, orderBook);
+			Log.infof("Computed buy limit order price: %s", price);
+		} catch (JsonProcessingException e) {
+			throw new IllegalStateException("JSON could not be parsed", e);
+		}
+		
+	}
+	
+    private Map<String, String> signQueryParams(Map<String, String> params) {
+    	StringJoiner joiner = new StringJoiner("&");
+    	for (Entry<String, String> entry : params.entrySet()) {
+			joiner.add(entry.getKey() + "=" + entry.getValue());
+		}
+    	String signature = HexFormat.of().formatHex(mac.doFinal(joiner.toString().getBytes()));
+    	params.put("signature", signature);
+    	return params;
+    }
+    
+	private void placeNewBuyOrder() {
+		
+	}
+	
+//		// TODO kdyz price jeste neni nasetovana routou vyse - muze se stat, je to async
+//		from(String.format("quartz:placeOrder?cron=59+%d+%d+%d+%d+?+%d",
+//    			startMinute, startHour,
+//    			localDate.getDayOfMonth(), localDate.getMonthValue(), localDate.getYear()))
+//			// TODO reagovat na ruzne chyby, napr. too many requests, nepovoleni buy order s vyssi cenou nez napr. 0.5
+//    		.errorHandler(defaultErrorHandler()
+//    				.maximumRedeliveries(10)
+//    				.redeliveryDelay(1)
+//    				.logRetryAttempted(true)
+//    				.log(TraderAgent.class)
+//    				.loggingLevel(LoggingLevel.INFO)
+//    				.retryAttemptedLogLevel(LoggingLevel.INFO))
+//    		.delay(950)
+//    		.setHeader("X-MEXC-APIKEY", constant(ACCESS_KEY))
+//    		.setHeader("Content-Type", constant("application/json"))
+//    		.setHeader(HttpConstants.HTTP_METHOD, constant(HttpMethods.POST))
+//    		.setHeader(HttpConstants.HTTP_QUERY).exchange(e -> {
+//    			// TODO ten timestamp musi byt minimalne v cas otevreni
+//    			long timestamp = new Date().getTime();
+//    			StringBuilder queryBuilder = new StringBuilder();
+//    			if (buyOrderPriceProperty.equalsIgnoreCase("market")) {
+//    				queryBuilder.append("type=MARKET").append("&quoteOrderQty=").append(usdtVolume);
+//    			} else {
+//    				queryBuilder.append("type=LIMIT")
+//    					.append("&quantity=").append(usdtVolume.divide(price, 2, RoundingMode.HALF_UP))
+//    					.append("&price=").append(price.toPlainString());
+//    			}
+//    			queryBuilder.append("&symbol=").append(symbol)
+//    				.append("&side=BUY")
+//    				.append("&timestamp=").append(timestamp);
+//    			String signature = Hex.encodeHexString(mac.doFinal(queryBuilder.toString().getBytes()));
+//    			return queryBuilder.append("&signature=").append(signature).toString();
+//    		})
+//    		.setBody().constant(null)
+//    		.log(LoggingLevel.DEBUG, "New order request: ${body}")
+//			.to("https://api.mexc.com/api/v3/order")
+//			.log(LoggingLevel.DEBUG, "New order response: ${body}")
+//			.unmarshal().json(JsonLibrary.Jackson, OrderResponse.class)
+//			.log("New order: ${body}")
+//			.process().body(OrderResponse.class, r -> buyOrderId = r.orderId());
+
+//    }
+
+}
