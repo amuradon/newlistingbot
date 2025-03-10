@@ -101,8 +101,7 @@ public class MexcWsClient {
 		} catch (JsonProcessingException e) {
 			Log.error("The Websocket client could not parse JSON.", e);
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			Log.error("The Websocket message processing failed.", e);
 		}
 	}
 	

@@ -28,7 +28,7 @@ public interface MexcClient {
 	@Path("/order")
 	@POST
 	@ClientHeaderParam(name = "X-MEXC-APIKEY", value = "${mexc.apiKey}")
-	OrderResponse newOrder(@PathParam("query") String query);
+	OrderResponse newOrder(@RestQuery Map<String, String> queryParams);
 
 	@Path("/userDataStream")
 	@POST
