@@ -9,7 +9,6 @@ import java.nio.file.StandardOpenOption;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.HexFormat;
@@ -19,6 +18,7 @@ import java.util.Map.Entry;
 import java.util.StringJoiner;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import javax.crypto.Mac;
@@ -35,10 +35,13 @@ import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
+import jakarta.ws.rs.WebApplicationException;
 
 @ApplicationScoped
 public class TraderAgent {
 	
+	private static final String NOT_YET_TRADING_ERR = "symbol not support api";
+
 	private static final String TIME_PROP_NAME = "time";
 
 	private static final String HMAC_SHA256 = "HmacSHA256";
@@ -100,17 +103,13 @@ public class TraderAgent {
 		try {
 			mac = Mac.getInstance(HMAC_SHA256);
 			mac.init(new SecretKeySpec(secretKey.getBytes(), HMAC_SHA256));
-		} catch (NoSuchAlgorithmException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (InvalidKeyException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+		} catch (NoSuchAlgorithmException | InvalidKeyException e) {
+			throw new IllegalStateException("Could not setup encoder", e);
 		}
     }
     
 	// XXX Temporary testing
-	@Startup
+//	@Startup
     public void run() {
 		int startHour = listingHour;
 		int startMinute = listingMinute;
@@ -125,19 +124,31 @@ public class TraderAgent {
 		Log.infof("Listing at %d:%d", listingHour, listingMinute);
 		Log.infof("Agent starts at %d:%d", startHour, startMinute);
 		
-		LocalDateTime beforeStart = LocalDateTime.now().withHour(startHour).withMinute(startMinute);
+		LocalDateTime beforeStart = LocalDateTime.now().withHour(startHour).withMinute(startMinute).withSecond(50);
 		Log.infof("Listing start: %s", beforeStart);
 		LocalDateTime now = LocalDateTime.now();
 		
-		scheduler.schedule(this::prepare, Math.max(0, now.until(beforeStart.withSecond(50), ChronoUnit.SECONDS)),
+		if (now.isAfter(beforeStart)) {
+			throw new IllegalStateException(String.format("The start time '%s' is in past", beforeStart));
+		}
+		
+		ScheduledFuture<?> prepareTask = scheduler.schedule(this::prepare, Math.max(0, now.until(beforeStart, ChronoUnit.SECONDS)),
 				TimeUnit.SECONDS);
-		scheduler.schedule(this::placeNewBuyOrder,
+		ScheduledFuture<?> placeNewBuyOrderTask = scheduler.schedule(this::placeNewBuyOrder,
 				Math.max(0, now.until(beforeStart.withSecond(59).withNano(800000000), ChronoUnit.MILLIS)),
 				TimeUnit.MILLISECONDS);
+		
+		try {
+			prepareTask.get();
+			placeNewBuyOrderTask.get();
+		} catch (Exception e) {
+			throw new RuntimeException("The execution failed", e);
+		}
+		
 	}
-	
+    
     // XXX Temporary testing
-//    @Startup
+    @Startup
 	public void prepare() {
 		/*
 		 * TODO
@@ -179,7 +190,7 @@ public class TraderAgent {
 		}
 		
 		// XXX temporary testing
-//		placeNewBuyOrder();
+		placeNewBuyOrder();
 	}
 	
     private Map<String, String> signQueryParams(Map<String, String> params) {
@@ -203,19 +214,32 @@ public class TraderAgent {
 		queryParams.put("price", price.toPlainString());
 		
 		// XXX Temporary testing
-//		queryParams.put("timestamp", String.valueOf(new Date().getTime()));
-		LocalDateTime now = LocalDateTime.now();
-		queryParams.put("timestamp", String.valueOf(LocalDateTime.of(now.getYear(), now.getMonthValue(),
-				now.getDayOfMonth(), listingHour, listingMinute)
-				.atZone(ZoneOffset.systemDefault()).toInstant().toEpochMilli()));
+		queryParams.put("timestamp", String.valueOf(new Date().getTime()));
+//		LocalDateTime now = LocalDateTime.now();
+//		queryParams.put("timestamp", String.valueOf(LocalDateTime.of(now.getYear(), now.getMonthValue(),
+//				now.getDayOfMonth(), listingHour, listingMinute)
+//				.atZone(ZoneOffset.systemDefault()).toInstant().toEpochMilli()));
 		
 		// XXX Remove or debug?
 		Log.infof("Query string: %s", queryParams);
 		
-		// TODO reagovat na ruzne chyby, napr. prilis brzy, too many requests, nepovoleni buy order s vyssi cenou nez napr. 0.5
-		OrderResponse response = mexcClient.newOrder(signQueryParams(queryParams));
-		buyOrderId = response.orderId();
-		Log.infof("New order place: %s", response);
+		// TODO reagovat na ruzne chyby, napr. too many requests, nepovoleni buy order s vyssi cenou nez napr. 0.5
+		for (int i = 1; i <= 10; i++) {
+			Log.infof("Place new buy limit order attempt %d", i);
+			try {
+				OrderResponse response = mexcClient.newOrder(signQueryParams(queryParams));
+				buyOrderId = response.orderId();
+				Log.infof("New order placed: %s", response);
+				break;
+			} catch (WebApplicationException e) {
+				ErrorResponse errorResponse = e.getResponse().readEntity(ErrorResponse.class);
+				Log.errorf("ERR response: %d - %s: %s", e.getResponse().getStatus(),
+						e.getResponse().getStatusInfo().getReasonPhrase(), errorResponse);
+				if (!NOT_YET_TRADING_ERR.equalsIgnoreCase(errorResponse.msg())) {
+					break;
+				}
+			}
+		}
 	}
 
 }
