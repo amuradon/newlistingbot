@@ -35,8 +35,7 @@ public class ComputeInitialPriceTest {
 		
 		OrderBook orderBook = new OrderBook(null, asks); 
 		BigDecimal result = compute.execute("VPTUSDT",
-				new ExchangeInfo(Collections.singletonList(
-						new SymbolInfo("VPTUSDT", "VPT", "USDT", 1, true, 2, 6, 6))),
+				6,
 				orderBook);
 		Assertions.assertEquals(new BigDecimal("0.408000"), result);
 	}
@@ -44,7 +43,7 @@ public class ComputeInitialPriceTest {
 	@Test
 	public void testFixed() {
 		ComputeInitialPrice compute = new ComputeInitialPrice("manual:0.00125");
-		BigDecimal result = compute.execute("VPTUSDT", null, null);
+		BigDecimal result = compute.execute("VPTUSDT", 6, null);
 		Assertions.assertEquals(new BigDecimal("0.00125"), result);
 	}
 	

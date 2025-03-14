@@ -7,14 +7,10 @@ import java.util.List;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import io.quarkus.logging.Log;
-import io.quarkus.runtime.annotations.RegisterForReflection;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import jakarta.inject.Named;
 
 @ApplicationScoped
-@Named(ComputeInitialPrice.BEAN_NAME)
-@RegisterForReflection
 public class ComputeInitialPrice {
 
 	public static final String BUY_ORDER_LIMIT_PRICE_PROP_NAME = "buyOrderPrice";
@@ -29,17 +25,10 @@ public class ComputeInitialPrice {
 	}
 	
 	public BigDecimal execute(String symbol,
-			ExchangeInfo exchangeInfo,
+			int priceScale,
 			OrderBook orderBook) {
 		if (buyOrderPriceProperty.startsWith("slippage")) {
 			String slippage = extractValue(buyOrderPriceProperty);
-			int priceScale = 4;
-			for (SymbolInfo symbolInfo: exchangeInfo.symbols()) {
-				if (symbolInfo.symbol().equalsIgnoreCase(symbol)) {
-					priceScale = symbolInfo.quotePrecision();
-					break;
-				}
-			}
 	
 			List<List<BigDecimal>> asks = orderBook.asks();
 			BigDecimal priceSum = BigDecimal.ZERO;
@@ -70,8 +59,6 @@ public class ComputeInitialPrice {
 			}
 		} else if (buyOrderPriceProperty.startsWith("manual")) {
 			return new BigDecimal(extractValue(buyOrderPriceProperty));
-		} else if (buyOrderPriceProperty.startsWith("market")) {
-			return BigDecimal.ZERO;
 		} else {
 			if (!buyOrderPriceProperty.equalsIgnoreCase("auto")) {
 				Log.errorf("The property '%s' has invalid value '%s'. Defaulting to 'auto'",

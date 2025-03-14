@@ -6,23 +6,15 @@ import java.math.RoundingMode;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.security.InvalidKeyException;
-import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Map.Entry;
-import java.util.StringJoiner;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
@@ -30,6 +22,7 @@ import org.eclipse.microprofile.rest.client.inject.RestClient;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import cz.amuradon.tralon.newlisting.trader.RequestBuilder.SignedNewOrderRequestBuilder;
 import io.quarkus.logging.Log;
 import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -43,8 +36,6 @@ public class TraderAgent {
 	private static final String NOT_YET_TRADING_ERR = "symbol not support api";
 
 	private static final String TIME_PROP_NAME = "time";
-
-	private static final String HMAC_SHA256 = "HmacSHA256";
 
 	private final ScheduledExecutorService scheduler;
 	
@@ -64,12 +55,10 @@ public class TraderAgent {
     
     private final int listingMinute;
     
-	private Mac mac;
+    private final DataHolder dataHolder;
+    
+	private final RequestBuilder requestBuilder; 
 	
-	private BigDecimal price;
-	
-	private String buyOrderId;
-
 	@Inject
     public TraderAgent(
     		@RestClient final MexcClient mexcClient,
@@ -79,7 +68,9 @@ public class TraderAgent {
     		@ConfigProperty(name = "usdtVolume") final String usdtVolume,
     		@Named(BeanConfig.SYMBOL) final String symbol,
     		@ConfigProperty(name = TIME_PROP_NAME) final String time,
-    		@Named(BeanConfig.DATA_DIR) final Path dataDir) {
+    		@Named(BeanConfig.DATA_DIR) final Path dataDir,
+    		final DataHolder dataHolder,
+    		final RequestBuilder requestBuilder) {
     	
 		scheduler = Executors.newScheduledThreadPool(2);
 		this.mexcClient = mexcClient;
@@ -89,6 +80,8 @@ public class TraderAgent {
     	this.symbol = symbol;
     	this.dataDir = dataDir;
     	this.mapper = new ObjectMapper();
+    	this.dataHolder = dataHolder;
+    	this.requestBuilder = requestBuilder;
     	
     	String[] timeParts = time.split(":");
     	if (timeParts.length >= 2) {
@@ -99,13 +92,6 @@ public class TraderAgent {
     				String.format("The property '%s' has invalid value '%s'. The expected format is HH:mm",
     						TIME_PROP_NAME, time));
     	}
-    	
-		try {
-			mac = Mac.getInstance(HMAC_SHA256);
-			mac.init(new SecretKeySpec(secretKey.getBytes(), HMAC_SHA256));
-		} catch (NoSuchAlgorithmException | InvalidKeyException e) {
-			throw new IllegalStateException("Could not setup encoder", e);
-		}
     }
     
 	// XXX Temporary testing
@@ -164,7 +150,7 @@ public class TraderAgent {
 		Map<String, String> queryParams = new LinkedHashMap<>();
 		queryParams.put("timestamp", String.valueOf(timestamp));
 		
-		ListenKey listenKey = mexcClient.userDataStream(signQueryParams(queryParams));
+		ListenKey listenKey = mexcClient.userDataStream(requestBuilder.signQueryParams(queryParams));
 		mexcWsClient.connect(listenKey.listenKey());
 		
 		// get order book
@@ -183,8 +169,8 @@ public class TraderAgent {
 			ExchangeInfo exchangeInfo = mapper.readValue(exchangeInfoJson, ExchangeInfo.class);
 			OrderBook orderBook = mapper.readValue(orderBookJson, OrderBook.class);
 			
-			price = computeInitialPrice.execute(symbol, exchangeInfo, orderBook);
-			Log.infof("Computed buy limit order price: %s", price);
+			dataHolder.setInitialBuyPrice(computeInitialPrice.execute(symbol, extractPriceScale(symbol, exchangeInfo), orderBook));
+			Log.infof("Computed buy limit order price: %s", dataHolder.getInitialBuyPrice());
 		} catch (JsonProcessingException e) {
 			throw new IllegalStateException("JSON could not be parsed", e);
 		}
@@ -192,43 +178,44 @@ public class TraderAgent {
 		// XXX temporary testing
 		placeNewBuyOrder();
 	}
-	
-    private Map<String, String> signQueryParams(Map<String, String> params) {
-    	StringJoiner joiner = new StringJoiner("&");
-    	for (Entry<String, String> entry : params.entrySet()) {
-			joiner.add(entry.getKey() + "=" + entry.getValue());
-		}
-    	String signature = HexFormat.of().formatHex(mac.doFinal(joiner.toString().getBytes()));
-    	params.put("signature", signature);
-    	return params;
-    }
     
+	private int extractPriceScale(String symbol, ExchangeInfo exchangeInfo) {
+		int priceScale = 4;
+		for (SymbolInfo symbolInfo: exchangeInfo.symbols()) {
+			if (symbolInfo.symbol().equalsIgnoreCase(symbol)) {
+				priceScale = symbolInfo.quotePrecision();
+				break;
+			}
+		}
+		dataHolder.setPriceScale(priceScale);
+		return priceScale;
+	}
+	
 	private void placeNewBuyOrder() {
 		// TODO kdyz price jeste neni nasetovana metodou vyse - muze se stat, je to async
 	
-		Map<String, String> queryParams = new LinkedHashMap<>();
-		queryParams.put("symbol", symbol);
-		queryParams.put("side", "BUY");
-		queryParams.put("type", "LIMIT");
-		queryParams.put("quantity", usdtVolume.divide(price, 2, RoundingMode.HALF_UP).toPlainString());
-		queryParams.put("price", price.toPlainString());
+		BigDecimal price = dataHolder.getInitialBuyPrice();
+		SignedNewOrderRequestBuilder newOrderBuilder = requestBuilder.newOrder()
+			.symbol(symbol)
+			.side(Side.BUY)
+			.type("LIMIT")
+			.quantity(usdtVolume.divide(price, 2, RoundingMode.HALF_UP))
+			.price(price)
 		
-		// XXX Temporary testing
-		queryParams.put("timestamp", String.valueOf(new Date().getTime()));
+			// XXX Temporary testing
+			.timestamp(new Date().getTime())
 //		LocalDateTime now = LocalDateTime.now();
-//		queryParams.put("timestamp", String.valueOf(LocalDateTime.of(now.getYear(), now.getMonthValue(),
+//		.timestamp(LocalDateTime.of(now.getYear(), now.getMonthValue(),
 //				now.getDayOfMonth(), listingHour, listingMinute)
-//				.atZone(ZoneOffset.systemDefault()).toInstant().toEpochMilli()));
-		
-		// XXX Remove or debug?
-		Log.infof("Query string: %s", queryParams);
+//				.atZone(ZoneOffset.systemDefault()).toInstant().toEpochMilli())
+			.signParams();
 		
 		// TODO reagovat na ruzne chyby, napr. too many requests, nepovoleni buy order s vyssi cenou nez napr. 0.5
 		for (int i = 1; i <= 10; i++) {
 			Log.infof("Place new buy limit order attempt %d", i);
 			try {
-				OrderResponse response = mexcClient.newOrder(signQueryParams(queryParams));
-				buyOrderId = response.orderId();
+				OrderResponse response = newOrderBuilder.send();
+				dataHolder.setBuyOrderId(response.orderId());
 				Log.infof("New order placed: %s", response);
 				break;
 			} catch (WebApplicationException e) {
