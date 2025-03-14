@@ -94,8 +94,12 @@ public class MexcWsClient {
 					Files.writeString(tradeUpdatesFilePath, message + "\n", StandardOpenOption.CREATE, StandardOpenOption.APPEND);
 				} else if (SPOT_ACCOUNT_UPDATES_CHANNEL.equalsIgnoreCase(channel)) {
 					Log.infof("ACCOUNT: %s", message);
+					// TODO #22 Place take profit for all partial fills
 				} else if (SPOT_ORDER_UPDATES_CHANNEL.equalsIgnoreCase(channel)) {
 					Log.infof("ORDERS: %s", message);
+					OrderUpdate orderUpdate = mapper.readValue(message, OrderUpdate.class);
+					System.out.println(orderUpdate);
+					// TODO #14 calculate weighted average price for stop loss and monitor trades / price to drop below
 				}
 			}
 		} catch (JsonProcessingException e) {
