@@ -8,11 +8,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
-import java.util.Date;
-import java.util.LinkedHashMap;
+import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
@@ -21,6 +18,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import cz.amuradon.tralon.newlisting.json.Side;
+import cz.amuradon.tralon.newlisting.json.TradeDetail;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -48,6 +47,8 @@ public class MexcWsClient {
 	
 	private final int stopLoss;
 	
+	private final Integer[] takeProfits;
+	
 	private final String symbol;
 	
 	private final ObjectMapper mapper;
@@ -66,21 +67,25 @@ public class MexcWsClient {
 	
 	private final RequestBuilder requestBuilder;
 
-	private BigDecimal stopLossPrice;
+	private BigDecimal stopLossPrice = BigDecimal.ZERO;
 	
 	private boolean initialBuyValid = true;
 	
 	private long buyOrderPriceOverTimestamp = Long.MAX_VALUE;
 	
+	private BigDecimal baseQuantity;
+	
 	@Inject
 	public MexcWsClient(@ConfigProperty(name = "mexc-api.websocket.url") final String baseUri,
 			@ConfigProperty(name = "stopLoss") final int stopLoss,
+			@ConfigProperty(name = "takeProfit") final String takeProfit,
 			@Named(BeanConfig.SYMBOL) final String symbol,
 			@Named(BeanConfig.DATA_DIR) final Path dataDir,
 			final DataHolder dataHolder,
 			final RequestBuilder requestBuilder) {
 		this.baseUri = baseUri;
 		this.stopLoss = stopLoss;
+		this.takeProfits = Arrays.stream(takeProfit.split(",")).map(Integer::parseInt).toArray(Integer[]::new);
 		this.symbol = symbol;
 		mapper = new ObjectMapper();
 		this.dataHolder = dataHolder;
@@ -135,7 +140,7 @@ public class MexcWsClient {
 								.symbol(symbol)
 								.side(Side.SELL)
 								.type("MARKET")
-								.quantity(priceQtys.stream().map(p -> p.quantity()).reduce(BigDecimal.ZERO, BigDecimal::add))
+								.quantity(baseQuantity)
 								.send();
 						}
 						
@@ -165,12 +170,15 @@ public class MexcWsClient {
 					if (orderDetail.orderId().equalsIgnoreCase(dataHolder.getBuyOrderId())){
 						if (orderDetail.status() == Status.PARTIALLY_TRADED) {
 							priceQtys.add(new PriceQuantity(orderDetail.averagePrice(), orderDetail.quantityBase()));
+							baseQuantity = orderDetail.cumulativeQuantityBase();
 						} else if (orderDetail.status() == Status.FULLY_TRADED) {
 							priceQtys.add(new PriceQuantity(orderDetail.averagePrice(), orderDetail.quantityBase()));
 							initialBuyValid = false;
-							calculatedStopLoss();
+							baseQuantity = orderDetail.cumulativeQuantityBase();
+							buyOrderFinished();
 						} else if (orderDetail.status() == Status.PARTIALLY_CANCELLED) {
-							calculatedStopLoss();
+							initialBuyValid = false;
+							buyOrderFinished();
 						}
 					}
 				}
@@ -182,16 +190,30 @@ public class MexcWsClient {
 		}
 	}
 
-	private void calculatedStopLoss() {
+	private void buyOrderFinished() {
+		BigDecimal initialPrice = getWeightedInitialBuyPrice();
+		setStopLoss(initialPrice);
+		placeTakeProfits(initialPrice);
+	}
+	
+	private void placeTakeProfits(BigDecimal initialPrice) {
+		
+	}
+
+	private BigDecimal getWeightedInitialBuyPrice() {
 		BigDecimal totalAmountQuote = BigDecimal.ZERO;
 		BigDecimal totalQuantityBase = BigDecimal.ZERO;
 		for (PriceQuantity priceQty : priceQtys) {
 			totalAmountQuote = totalAmountQuote.add(priceQty.price().multiply(priceQty.quantity()));
 			totalQuantityBase = totalAmountQuote.add(priceQty.quantity());
 		}
+		return totalAmountQuote.divide(totalQuantityBase, 10, RoundingMode.HALF_UP);
+	}
+
+	private void setStopLoss(BigDecimal initialPrice) {
 		BigDecimal factor = new BigDecimal(stopLoss)
-				.divide(new BigDecimal(100), 4, RoundingMode.HALF_UP);
-		stopLossPrice = totalAmountQuote.divide(totalQuantityBase, 10, RoundingMode.HALF_UP)
+				.divide(new BigDecimal(100), 10, RoundingMode.HALF_UP);
+		stopLossPrice = initialPrice
 				.multiply(factor).setScale(dataHolder.getPriceScale(), RoundingMode.HALF_UP);
 	}
 

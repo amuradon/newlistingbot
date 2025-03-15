@@ -1,4 +1,4 @@
-package cz.amuradon.tralon.newlistingtrager;
+package cz.amuradon.tralon.newlisting.json;
 
 import java.util.List;
 

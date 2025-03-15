@@ -1,4 +1,4 @@
-package cz.amuradon.tralon.newlisting.trader;
+package cz.amuradon.tralon.newlisting.json;
 
 import java.math.BigDecimal;
 

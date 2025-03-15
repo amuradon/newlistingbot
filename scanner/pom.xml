@@ -4,14 +4,20 @@
 	<packaging>jar</packaging>
 	
 	<parent>
-		<groupId>cz.amuradon.tralon.newlistingtrader</groupId>
-		<artifactId>newlistingtrader-parent</artifactId>
+		<groupId>cz.amuradon.tralon.newlisting</groupId>
+		<artifactId>newlisting-parent</artifactId>
 		<version>0.0.1-SNAPSHOT</version>
 	</parent>
 	
-	<artifactId>newlistingtrader-scanner</artifactId>
+	<artifactId>newlisting-scanner</artifactId>
 
 	<dependencies>
+		<dependency>
+			<groupId>${project.groupId}</groupId>
+			<artifactId>newlisting-common</artifactId>
+			<version>${project.version}</version>
+		</dependency>
+		
 		<!-- Quarkus-->
 		<dependency>
 			<groupId>io.quarkus</groupId>

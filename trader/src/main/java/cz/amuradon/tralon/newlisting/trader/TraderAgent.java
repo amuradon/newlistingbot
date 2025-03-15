@@ -22,6 +22,9 @@ import org.eclipse.microprofile.rest.client.inject.RestClient;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import cz.amuradon.tralon.newlisting.json.ExchangeInfo;
+import cz.amuradon.tralon.newlisting.json.Side;
+import cz.amuradon.tralon.newlisting.json.SymbolInfo;
 import cz.amuradon.tralon.newlisting.trader.RequestBuilder.SignedNewOrderRequestBuilder;
 import io.quarkus.logging.Log;
 import io.quarkus.runtime.Startup;
@@ -209,6 +212,8 @@ public class TraderAgent {
 //				now.getDayOfMonth(), listingHour, listingMinute)
 //				.atZone(ZoneOffset.systemDefault()).toInstant().toEpochMilli())
 			.signParams();
+		
+		// TODO muze byt az sem vsechno udelano dopredu a tady pockat na spravny cas otevreni burzy?
 		
 		// TODO reagovat na ruzne chyby, napr. too many requests, nepovoleni buy order s vyssi cenou nez napr. 0.5
 		for (int i = 1; i <= 10; i++) {

@@ -15,6 +15,7 @@ import javax.crypto.spec.SecretKeySpec;
 
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import cz.amuradon.tralon.newlisting.json.Side;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
