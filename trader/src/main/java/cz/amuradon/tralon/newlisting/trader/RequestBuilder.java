@@ -14,6 +14,7 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.eclipse.microprofile.rest.client.inject.RestClient;
 
 import cz.amuradon.tralon.newlisting.json.Side;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -30,7 +31,7 @@ public class RequestBuilder {
 	
 	@Inject
     public RequestBuilder(@ConfigProperty(name = "mexc.secretKey") final String secretKey,
-    		final MexcClient mexcClient) {
+    		@RestClient final MexcClient mexcClient) {
 		this.mexcClient = mexcClient;
 		try {
 			mac = Mac.getInstance(HMAC_SHA256);
