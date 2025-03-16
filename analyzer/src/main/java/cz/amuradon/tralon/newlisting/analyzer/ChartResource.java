@@ -72,12 +72,12 @@ public class ChartResource {
 			List<TimeSeries> timeSeries = new ArrayList<>(tradeDetails.size());
 			for (TradeDetail trade : tradeDetails) {
 				long timestamp = trade.timestamp();
-				if (previousTimestamp == timestamp) {
-					timestampAddition++;
-				} else {
-					previousTimestamp = timestamp;
-					timestampAddition = 0;
-				}
+//				if (previousTimestamp == timestamp) {
+//					timestampAddition++;
+//				} else {
+//					previousTimestamp = timestamp;
+//					timestampAddition = 0;
+//				}
 				timeSeries.add(new TimeSeries(timestamp + timestampAddition, trade.price().doubleValue()));
 			}
 			return Templates.chart(timeSeries);

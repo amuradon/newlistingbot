@@ -2,39 +2,12 @@
 
 <div id="container" style="width:100%; height:800px;"></div>
 <script>
-	Highcharts.chart('container', {
+// 	Highcharts.chart('container', {
+	Highcharts.stockChart('container', {
 		
-		chart: {
-	        zooming: {
-	            type: 'x'
-	        }
-	    },
-	
 	    title: {
-	        text: 'Token price',
-	        align: 'left'
+	        text: 'Token price'
 	    },
-	
-	    yAxis: {
-	        title: {
-	            text: 'Price'
-	        }
-	    },
-	
-	    xAxis: {
-	    	title: {
-	            text: 'Time'
-	        }
-	    },
-	
-	   /*  plotOptions: {
-	        series: {
-	            label: {
-	                connectorAllowed: false
-	            },
-	            pointStart: 2010
-	        }
-	    }, */
 	
 	    series: [{
 	        name: 'Token price',
@@ -42,23 +15,21 @@
 	        	{#for series in timeSeries}
 	        		[{series.timestamp}, {series.value}],
 	          	{/for}
-	        ]
-	    }],
-	
-	    responsive: {
-	        rules: [{
-	            condition: {
-	                maxWidth: 500
-	            },
-	            chartOptions: {
-	                legend: {
-	                    layout: 'horizontal',
-	                    align: 'center',
-	                    verticalAlign: 'bottom'
-	                }
-	            }
-	        }]
-	    }
+	        ],
+	        lineWidth: 0,
+	        marker: {
+                enabled: true,
+                radius: 2
+            },
+            tooltip: {
+                valueDecimals: 6
+            },
+            states: {
+                hover: {
+                    lineWidthPlus: 0
+                }
+            }
+	    }]
 	
 	});
 </script>
