@@ -2,6 +2,8 @@ package cz.amuradon.tralon.newlisting.trader;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Date;
+import java.util.HexFormat;
 import java.util.List;
 
 import org.junit.jupiter.api.Assertions;
@@ -33,4 +35,8 @@ public class ComputeInitialPriceTest {
 		Assertions.assertEquals(new BigDecimal("0.00125"), result);
 	}
 	
+	@Test
+	public void test() {
+		System.out.println(HexFormat.of().toHexDigits(new Date().getTime()));
+	}
 }

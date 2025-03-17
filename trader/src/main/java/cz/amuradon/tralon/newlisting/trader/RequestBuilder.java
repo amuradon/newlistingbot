@@ -69,6 +69,11 @@ public class RequestBuilder {
 		private Map<String, String> params = new LinkedHashMap<>();
 		private boolean signed = false;
     	
+		public NewOrderRequestBuilder clientOrderId(String clientOrderId) {
+			params.put("newClientOrderId", clientOrderId);
+			return this;
+		}
+
 		public NewOrderRequestBuilder side(Side side) {
     		params.put("side", side.name());
     		return this;

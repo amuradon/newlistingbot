@@ -36,4 +36,5 @@ public class TraderAgentTest {
     	joiner.add("signature=" + signature);
     	System.out.println("https://api.mexc.com/api/v3/userDataStream?" + joiner.toString());
 	}
+	
 }

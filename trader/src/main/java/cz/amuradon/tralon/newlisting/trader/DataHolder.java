@@ -9,6 +9,8 @@ public class DataHolder {
 
 	private String buyOrderId;
 	
+	private String buyClientOrderId;
+	
 	private int priceScale;
 	
 	private BigDecimal initialBuyPrice;
@@ -36,5 +38,14 @@ public class DataHolder {
 	public void setInitialBuyPrice(BigDecimal initialBuyPrice) {
 		this.initialBuyPrice = initialBuyPrice;
 	}
+
+	public String getBuyClientOrderId() {
+		return buyClientOrderId;
+	}
+
+	public void setBuyClientOrderId(String buyClientOrderId) {
+		this.buyClientOrderId = buyClientOrderId;
+	}
+
 
 }

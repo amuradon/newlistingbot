@@ -7,10 +7,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -124,7 +127,7 @@ public class TraderAgent {
 		ScheduledFuture<?> prepareTask = scheduler.schedule(this::prepare, Math.max(0, now.until(beforeStart, ChronoUnit.SECONDS)),
 				TimeUnit.SECONDS);
 		ScheduledFuture<?> placeNewBuyOrderTask = scheduler.schedule(this::placeNewBuyOrder,
-				Math.max(0, now.until(beforeStart.withSecond(59).withNano(800000000), ChronoUnit.MILLIS)),
+				Math.max(0, now.until(beforeStart.withSecond(59).withNano(900000000), ChronoUnit.MILLIS)),
 				TimeUnit.MILLISECONDS);
 		
 		try {
@@ -197,8 +200,13 @@ public class TraderAgent {
 	private void placeNewBuyOrder() {
 		// TODO kdyz price jeste neni nasetovana metodou vyse - muze se stat, je to async
 	
+		String clientOrderId = symbol + "-" + HexFormat.of().toHexDigits(new Date().getTime());
+		Log.infof("Client Order ID: %s", clientOrderId);
+		LocalDateTime now = LocalDateTime.now();
 		BigDecimal price = dataHolder.getInitialBuyPrice();
+		dataHolder.setBuyClientOrderId(clientOrderId);
 		SignedNewOrderRequestBuilder newOrderBuilder = requestBuilder.newOrder()
+			.clientOrderId(clientOrderId)
 			.symbol(symbol)
 			.side(Side.BUY)
 			.type("LIMIT")
@@ -207,8 +215,7 @@ public class TraderAgent {
 		
 			// XXX Temporary testing
 			.timestamp(new Date().getTime())
-//		LocalDateTime now = LocalDateTime.now();
-//		.timestamp(LocalDateTime.of(now.getYear(), now.getMonthValue(),
+//			.timestamp(LocalDateTime.of(now.getYear(), now.getMonthValue(),
 //				now.getDayOfMonth(), listingHour, listingMinute)
 //				.atZone(ZoneOffset.systemDefault()).toInstant().toEpochMilli())
 			.signParams();
@@ -227,9 +234,11 @@ public class TraderAgent {
 				ErrorResponse errorResponse = e.getResponse().readEntity(ErrorResponse.class);
 				Log.errorf("ERR response: %d - %s: %s", e.getResponse().getStatus(),
 						e.getResponse().getStatusInfo().getReasonPhrase(), errorResponse);
-				if (!NOT_YET_TRADING_ERR.equalsIgnoreCase(errorResponse.msg())) {
-					break;
-				}
+				// XXX It looks the response may differ!!! E.g. XP 17.3.2025 
+				// ERR response: 400 - Bad Request: ErrorResponse[code=30001, msg=The current transaction direction is not allowed to place an order]
+//				if (!NOT_YET_TRADING_ERR.equalsIgnoreCase(errorResponse.msg())) {
+//					break;
+//				}
 			}
 		}
 	}

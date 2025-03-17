@@ -10,6 +10,7 @@ import cz.amuradon.tralon.newlisting.json.Side;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record OrderUpdateData(
 		@JsonProperty("i") String orderId,
+		@JsonProperty("c") String clientOrderId,
 //		@JsonProperty("o") int orderType, // TODO enum?
 		@JsonProperty("S") Side side,
 //		@JsonProperty("p") BigDecimal price,
