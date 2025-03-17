@@ -10,7 +10,6 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Produces;
-import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 
@@ -20,11 +19,6 @@ public class BeanConfig {
 	public static final String SYMBOL = "symbol";
 	
 	public static final String DATA_DIR = "dataDir";
-
-	@Inject
-	public BeanConfig() {
-		// TODO Auto-generated constructor stub
-	}
 
 	@Produces
 	@ApplicationScoped

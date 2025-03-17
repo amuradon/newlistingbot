@@ -39,7 +39,7 @@ import jakarta.ws.rs.WebApplicationException;
 @ApplicationScoped
 public class TraderAgent {
 	
-	private static final String NOT_YET_TRADING_ERR = "symbol not support api";
+	private static final String NOT_YET_TRADING_CODE = "30001";
 
 	private static final String TIME_PROP_NAME = "time";
 
@@ -234,11 +234,10 @@ public class TraderAgent {
 				ErrorResponse errorResponse = e.getResponse().readEntity(ErrorResponse.class);
 				Log.errorf("ERR response: %d - %s: %s", e.getResponse().getStatus(),
 						e.getResponse().getStatusInfo().getReasonPhrase(), errorResponse);
-				// XXX It looks the response may differ!!! E.g. XP 17.3.2025 
-				// ERR response: 400 - Bad Request: ErrorResponse[code=30001, msg=The current transaction direction is not allowed to place an order]
-//				if (!NOT_YET_TRADING_ERR.equalsIgnoreCase(errorResponse.msg())) {
-//					break;
-//				}
+				if (!NOT_YET_TRADING_CODE.equalsIgnoreCase(errorResponse.code())) {
+					Log.infof("It is not \"Not yet trading\" error code '%s', not retrying...", NOT_YET_TRADING_CODE);
+					break;
+				}
 			}
 		}
 	}
