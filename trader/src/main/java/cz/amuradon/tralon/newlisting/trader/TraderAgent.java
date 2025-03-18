@@ -13,7 +13,6 @@ import java.util.Date;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -101,7 +100,7 @@ public class TraderAgent {
     }
     
 	// XXX Temporary testing
-//	@Startup
+	@Startup
     public void run() {
 		int startHour = listingHour;
 		int startMinute = listingMinute;
@@ -127,7 +126,7 @@ public class TraderAgent {
 		ScheduledFuture<?> prepareTask = scheduler.schedule(this::prepare, Math.max(0, now.until(beforeStart, ChronoUnit.SECONDS)),
 				TimeUnit.SECONDS);
 		ScheduledFuture<?> placeNewBuyOrderTask = scheduler.schedule(this::placeNewBuyOrder,
-				Math.max(0, now.until(beforeStart.withSecond(59).withNano(900000000), ChronoUnit.MILLIS)),
+				Math.max(0, now.until(beforeStart.withSecond(59).withNano(950000000), ChronoUnit.MILLIS)),
 				TimeUnit.MILLISECONDS);
 		
 		try {
@@ -140,7 +139,7 @@ public class TraderAgent {
 	}
     
     // XXX Temporary testing
-    @Startup
+//    @Startup
 	public void prepare() {
 		/*
 		 * TODO
@@ -182,7 +181,7 @@ public class TraderAgent {
 		}
 		
 		// XXX temporary testing
-		placeNewBuyOrder();
+//		placeNewBuyOrder();
 	}
     
 	private int extractPriceScale(String symbol, ExchangeInfo exchangeInfo) {
@@ -214,10 +213,10 @@ public class TraderAgent {
 			.price(price)
 		
 			// XXX Temporary testing
-			.timestamp(new Date().getTime())
-//			.timestamp(LocalDateTime.of(now.getYear(), now.getMonthValue(),
-//				now.getDayOfMonth(), listingHour, listingMinute)
-//				.atZone(ZoneOffset.systemDefault()).toInstant().toEpochMilli())
+//			.timestamp(new Date().getTime())
+			.timestamp(LocalDateTime.of(now.getYear(), now.getMonthValue(),
+				now.getDayOfMonth(), listingHour, listingMinute)
+				.atZone(ZoneOffset.systemDefault()).toInstant().toEpochMilli())
 			.signParams();
 		
 		// TODO muze byt az sem vsechno udelano dopredu a tady pockat na spravny cas otevreni burzy?
