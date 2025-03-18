@@ -4,17 +4,17 @@
 	<packaging>jar</packaging>
 	
 	<parent>
-		<groupId>cz.amuradon.tralon.newlisting</groupId>
-		<artifactId>newlisting-parent</artifactId>
+		<groupId>cz.amuradon.newlistingbot</groupId>
+		<artifactId>newlistingbot-parent</artifactId>
 		<version>0.0.1-SNAPSHOT</version>
 	</parent>
 	
-	<artifactId>newlisting-scanner</artifactId>
+	<artifactId>newlistingbot-scanner</artifactId>
 
 	<dependencies>
 		<dependency>
 			<groupId>${project.groupId}</groupId>
-			<artifactId>newlisting-common</artifactId>
+			<artifactId>newlistingbot-common</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 		
