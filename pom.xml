@@ -1,7 +1,7 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
-	<groupId>cz.amuradon.newlistingbot</groupId>
+	<groupId>cz.amuradon.tralon.newlistingbot</groupId>
 	<artifactId>newlistingbot-parent</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<packaging>pom</packaging>
@@ -21,26 +21,12 @@
 				<scope>import</scope>
 			</dependency>
 			<dependency>
-				<groupId>io.quarkus.platform</groupId>
-				<artifactId>quarkus-camel-bom</artifactId>
-				<version>${quarkus.platform.version}</version>
-				<type>pom</type>
-				<scope>import</scope>
-			</dependency>
-			<dependency>
             	<groupId>org.junit</groupId>
             	<artifactId>junit-bom</artifactId>
             	<version>5.11.4</version>
             	<type>pom</type>
             	<scope>import</scope>
         	</dependency>
-
-			<!-- Logging -->
-			<dependency>
-				<groupId>org.slf4j</groupId>
-				<artifactId>slf4j-api</artifactId>
-				<version>2.0.16</version>
-			</dependency>
 
 			<!-- Testing -->
 			<!-- JUnit 5.10.3 has to stay due to quarkus-junit and mockito-junit transitive dependencies -->

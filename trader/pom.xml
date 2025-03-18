@@ -4,7 +4,7 @@
 	<packaging>jar</packaging>
 
 	<parent>
-		<groupId>cz.amuradon.newlistingbot</groupId>
+		<groupId>cz.amuradon.tralon.newlistingbot</groupId>
 		<artifactId>newlistingbot-parent</artifactId>
 		<version>0.0.1-SNAPSHOT</version>
 	</parent>
