@@ -59,6 +59,9 @@ public class TraderAgent {
     private final String symbol;
     private final ObjectMapper mapper;
     
+    private final int buyOrderRequestsPerSecond;
+	private final int buyOrderMaxAttempts;
+    
     private final Path dataDir;
     
     private final int listingHour;
@@ -79,6 +82,8 @@ public class TraderAgent {
     		@Named(BeanConfig.SYMBOL) final String symbol,
     		@ConfigProperty(name = TIME_PROP_NAME) final String time,
     		@Named(BeanConfig.DATA_DIR) final Path dataDir,
+    		@ConfigProperty(name = "buyOrder.requestsPerSecond") final int buyOrderRequestsPerSecond,
+    		@ConfigProperty(name = "buyOrder.maxAttempts") final int buyOrderMaxAttempts,
     		final DataHolder dataHolder,
     		final RequestBuilder requestBuilder) {
     	
@@ -88,6 +93,8 @@ public class TraderAgent {
 		this.computeInitialPrice = computeInitialPrice;
     	this.usdtVolume = new BigDecimal(usdtVolume);
     	this.symbol = symbol;
+    	this.buyOrderRequestsPerSecond = buyOrderRequestsPerSecond;
+    	this.buyOrderMaxAttempts = buyOrderMaxAttempts;
     	this.dataDir = dataDir;
     	this.mapper = new ObjectMapper();
     	this.dataHolder = dataHolder;
@@ -225,31 +232,42 @@ public class TraderAgent {
 			.signParams();
 		
 		// TODO muze byt az sem vsechno udelano dopredu a tady pockat na spravny cas otevreni burzy?
-		
-		// TODO reagovat na ruzne chyby, napr. too many requests, nepovoleni buy order s vyssi cenou nez napr. 0.5
-		for (int i = 1; i <= 10; i++) {
-			Log.infof("Place new buy limit order attempt %d", i);
-			try {
-				OrderResponse response = newOrderBuilder.send();
-				dataHolder.setBuyOrderId(response.orderId());
-				Log.infof("New order placed: %s", response);
-				break;
-			} catch (WebApplicationException e) {
-				Response response = e.getResponse();
-				ErrorResponse errorResponse = response.readEntity(ErrorResponse.class);
-				int status = response.getStatus();
-				Log.errorf("ERR response: %d - %s: %s, Headers: %s", status,
-						response.getStatusInfo().getReasonPhrase(), errorResponse, response.getHeaders());
-				if (ORDER_PRICE_ABOVE_LIMIT_ERR_CODE.equalsIgnoreCase(errorResponse.code())) {
-					Matcher matcher = Pattern.compile(".*(\\d+\\.\\d+)USDT").matcher(errorResponse.msg());
-					if (matcher.find()) {
-						String maxPrice = matcher.group(1);
-						Log.infof("Resetting max price: '$s'", maxPrice);
-						newOrderBuilder.price(new BigDecimal(maxPrice)).signParams();
-					}
-				} else if (!NOT_YET_TRADING_ERR_CODE.equalsIgnoreCase(errorResponse.code())) {
-					Log.infof("It is not \"Not yet trading\" error code '%s', not retrying...", NOT_YET_TRADING_ERR_CODE);
+
+		// TODO avoid logging? Consuming resources?
+		// Quarkus by mel podporovat async logging
+		long previousSendTime = 0;
+		long msPerRequest = Math.round(Math.ceil(1000.0 / buyOrderRequestsPerSecond));
+		for (int i = 0; i < buyOrderMaxAttempts;) {
+			long currentTime = System.currentTimeMillis();
+			if (currentTime - previousSendTime > msPerRequest) {
+				i++;
+				previousSendTime = currentTime; 
+				Log.infof("Place new buy limit order attempt %d", i);
+				try {
+					OrderResponse response = newOrderBuilder.send();
+					dataHolder.setBuyOrderId(response.orderId());
+					Log.infof("New order placed: %s", response);
 					break;
+				} catch (WebApplicationException e) {
+					Response response = e.getResponse();
+					ErrorResponse errorResponse = response.readEntity(ErrorResponse.class);
+					int status = response.getStatus();
+					Log.errorf("ERR response: %d - %s: %s, Headers: %s", status,
+							response.getStatusInfo().getReasonPhrase(), errorResponse, response.getHeaders());
+					if (ORDER_PRICE_ABOVE_LIMIT_ERR_CODE.equalsIgnoreCase(errorResponse.code())) {
+						Matcher matcher = Pattern.compile(".*(\\d+\\.\\d+)USDT").matcher(errorResponse.msg());
+						if (matcher.find()) {
+							String maxPrice = matcher.group(1);
+							Log.infof("Resetting max price: '$s'", maxPrice);
+							newOrderBuilder.price(new BigDecimal(maxPrice)).signParams();
+						}
+					} else if (status == 429) {
+						Log.warnf("Retry after: ", response.getHeaderString("Retry-After"));
+						// Do nothing, repeat
+					} else if (!NOT_YET_TRADING_ERR_CODE.equalsIgnoreCase(errorResponse.code())) {
+						Log.infof("It is not \"Not yet trading\" error code '%s', not retrying...", NOT_YET_TRADING_ERR_CODE);
+						break;
+					}
 				}
 			}
 		}

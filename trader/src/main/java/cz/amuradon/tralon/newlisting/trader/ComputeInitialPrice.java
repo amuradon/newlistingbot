@@ -13,7 +13,7 @@ import jakarta.inject.Inject;
 @ApplicationScoped
 public class ComputeInitialPrice {
 
-	public static final String BUY_ORDER_LIMIT_PRICE_PROP_NAME = "buyOrderPrice";
+	public static final String BUY_ORDER_LIMIT_PRICE_PROP_NAME = "buyOrder.price";
 
 	public static final String BEAN_NAME = "computeInitialPrice";
 	
