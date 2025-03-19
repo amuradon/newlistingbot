@@ -17,6 +17,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
@@ -27,18 +29,21 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import cz.amuradon.tralon.newlisting.json.ExchangeInfo;
 import cz.amuradon.tralon.newlisting.json.Side;
 import cz.amuradon.tralon.newlisting.json.SymbolInfo;
-import cz.amuradon.tralon.newlisting.trader.RequestBuilder.SignedNewOrderRequestBuilder;
+import cz.amuradon.tralon.newlisting.trader.RequestBuilder.NewOrderRequestBuilder;
 import io.quarkus.logging.Log;
 import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.Response;
 
 @ApplicationScoped
 public class TraderAgent {
 	
-	private static final String NOT_YET_TRADING_CODE = "30001";
+	private static final String NOT_YET_TRADING_ERR_CODE = "30001";
+	
+	private static final String ORDER_PRICE_ABOVE_LIMIT_ERR_CODE = "30010";
 
 	private static final String TIME_PROP_NAME = "time";
 
@@ -126,7 +131,7 @@ public class TraderAgent {
 		ScheduledFuture<?> prepareTask = scheduler.schedule(this::prepare, Math.max(0, now.until(beforeStart, ChronoUnit.SECONDS)),
 				TimeUnit.SECONDS);
 		ScheduledFuture<?> placeNewBuyOrderTask = scheduler.schedule(this::placeNewBuyOrder,
-				Math.max(0, now.until(beforeStart.withSecond(59).withNano(950000000), ChronoUnit.MILLIS)),
+				Math.max(0, now.until(beforeStart.withSecond(59).withNano(980000000), ChronoUnit.MILLIS)),
 				TimeUnit.MILLISECONDS);
 		
 		try {
@@ -204,7 +209,7 @@ public class TraderAgent {
 		LocalDateTime now = LocalDateTime.now();
 		BigDecimal price = dataHolder.getInitialBuyPrice();
 		dataHolder.setBuyClientOrderId(clientOrderId);
-		SignedNewOrderRequestBuilder newOrderBuilder = requestBuilder.newOrder()
+		NewOrderRequestBuilder newOrderBuilder = requestBuilder.newOrder()
 			.clientOrderId(clientOrderId)
 			.symbol(symbol)
 			.side(Side.BUY)
@@ -230,11 +235,20 @@ public class TraderAgent {
 				Log.infof("New order placed: %s", response);
 				break;
 			} catch (WebApplicationException e) {
-				ErrorResponse errorResponse = e.getResponse().readEntity(ErrorResponse.class);
-				Log.errorf("ERR response: %d - %s: %s", e.getResponse().getStatus(),
-						e.getResponse().getStatusInfo().getReasonPhrase(), errorResponse);
-				if (!NOT_YET_TRADING_CODE.equalsIgnoreCase(errorResponse.code())) {
-					Log.infof("It is not \"Not yet trading\" error code '%s', not retrying...", NOT_YET_TRADING_CODE);
+				Response response = e.getResponse();
+				ErrorResponse errorResponse = response.readEntity(ErrorResponse.class);
+				int status = response.getStatus();
+				Log.errorf("ERR response: %d - %s: %s, Headers: %s", status,
+						response.getStatusInfo().getReasonPhrase(), errorResponse, response.getHeaders());
+				if (ORDER_PRICE_ABOVE_LIMIT_ERR_CODE.equalsIgnoreCase(errorResponse.code())) {
+					Matcher matcher = Pattern.compile(".*(\\d+\\.\\d+)USDT").matcher(errorResponse.msg());
+					if (matcher.find()) {
+						String maxPrice = matcher.group(1);
+						Log.infof("Resetting max price: '$s'", maxPrice);
+						newOrderBuilder.price(new BigDecimal(maxPrice)).signParams();
+					}
+				} else if (!NOT_YET_TRADING_ERR_CODE.equalsIgnoreCase(errorResponse.code())) {
+					Log.infof("It is not \"Not yet trading\" error code '%s', not retrying...", NOT_YET_TRADING_ERR_CODE);
 					break;
 				}
 			}

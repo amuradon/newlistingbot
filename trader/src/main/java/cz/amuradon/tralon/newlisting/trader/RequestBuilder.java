@@ -63,7 +63,7 @@ public class RequestBuilder {
     	return mexcClient.cancelOrder(signQueryParams(params));
     }
 
-    public final class NewOrderRequestBuilder implements SignedNewOrderRequestBuilder {
+    public final class NewOrderRequestBuilder {
     	
     	private static final String TIMESTAMP = "timestamp";
 		private Map<String, String> params = new LinkedHashMap<>();
@@ -71,40 +71,47 @@ public class RequestBuilder {
     	
 		public NewOrderRequestBuilder clientOrderId(String clientOrderId) {
 			params.put("newClientOrderId", clientOrderId);
+			signed = false;
 			return this;
 		}
 
 		public NewOrderRequestBuilder side(Side side) {
     		params.put("side", side.name());
+    		signed = false;
     		return this;
     	}
 
     	public NewOrderRequestBuilder symbol(String symbol) {
     		params.put("symbol", symbol);
+    		signed = false;
     		return this;
     	}
 
     	public NewOrderRequestBuilder type(String type) {
     		params.put("type", type);
+    		signed = false;
     		return this;
     	}
     	
     	public NewOrderRequestBuilder quantity(BigDecimal quantity) {
     		params.put("quantity", quantity.toPlainString());
+    		signed = false;
     		return this;
     	}
    
     	public NewOrderRequestBuilder price(BigDecimal price) {
     		params.put("price", price.toPlainString());
+    		signed = false;
     		return this;
     	}
     	
     	public NewOrderRequestBuilder timestamp(long timestamp) {
     		params.put(TIMESTAMP, String.valueOf(timestamp));
+    		signed = false;
     		return this;
     	}
 
-    	public SignedNewOrderRequestBuilder signParams() {
+    	public NewOrderRequestBuilder signParams() {
     		params = signQueryParams(params);
     		signed = true;
     		return this;
@@ -113,13 +120,10 @@ public class RequestBuilder {
     	public OrderResponse send() {
     		if (params.get(TIMESTAMP) == null) {
     			params.put(TIMESTAMP, String.valueOf(new Date().getTime()));
+    			signed = false;
     		}
     		return mexcClient.newOrder(signed ? params : signQueryParams(params));
     	}
     }
     
-    public interface SignedNewOrderRequestBuilder {
-    	OrderResponse send();
-    }
-
 }
