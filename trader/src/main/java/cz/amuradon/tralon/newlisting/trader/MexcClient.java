@@ -26,14 +26,14 @@ public interface MexcClient {
 	@ClientQueryParam(name = "limit", value = "5000")
 	String depth(@RestQuery String symbol);
 	
-	// XXX #29 presunout blocking vys, mel by blokovat cele zpracovani WS update
+	// FIXME #29 presunout blocking vys, nefunguje
 	@Blocking
 	@Path("/order")
 	@POST
 	@ClientHeaderParam(name = "X-MEXC-APIKEY", value = "${mexc.apiKey}")
 	OrderResponse newOrder(@RestQuery Map<String, String> queryParams);
 	
-	// XXX #29 presunout blocking vys, mel by blokovat cele zpracovani WS update
+	// FIXME #29 presunout blocking vys, nefunguje
 	@Blocking
 	@Path("/order")
 	@DELETE

@@ -94,6 +94,9 @@ public class UpdatesListener {
 	// XXX #29 mel by blokovat cele zpracovani WS update, reseni nize nefunguje
 	// @Blocking
 	public void onMessage(String message) {
+		// FIXME ATN ihned me chytil stop loss, jinak jsem mohl udelat slusne penize
+		// FIXME ATN, i kdyz mi hitnul stop loss, tak se stale snazil umistit order, nekde je chyba
+		// FIXME stale problem s blocking, ale jak to, ze stop loss zafungoval?
 		try {
 			JsonNode tree = mapper.readTree(message);
 			JsonNode channelNode = tree.get("c");

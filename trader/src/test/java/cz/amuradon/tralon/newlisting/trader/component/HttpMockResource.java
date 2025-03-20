@@ -1,5 +1,7 @@
 package cz.amuradon.tralon.newlisting.trader.component;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -19,6 +21,11 @@ import okhttp3.mockwebserver.RecordedRequest;
 
 public class HttpMockResource implements QuarkusTestResourceLifecycleManager {
 
+	private final Path dataRootPath =
+			Path.of("C:\\work\\workspace-java\\newlistingbot\\trader\\data\\mexc\\\\20250319\\\\RXUSDT");
+	
+	private final String symbol = "RXUSDT";
+	
 	private DefaultMockServer server;
 
 	@Override
@@ -36,29 +43,15 @@ public class HttpMockResource implements QuarkusTestResourceLifecycleManager {
 		
 		server.expect().get().withPath("/ws").andUpgradeToWebSocket()
 			.open()
-			.expect("{ \"method\":\"SUBSCRIPTION\", \"params\":[\"spot@private.account.v3.api\", \"spot@private.orders.v3.api\", \"spot@public.increase.depth.v3.api@XPUSDT\", \"spot@public.deals.v3.api@XPUSDT\"] }")
-//			.expectHttpRequest("/ws")
+			.expect(String.format("{ \"method\":\"SUBSCRIPTION\", \"params\":[\"spot@private.account.v3.api\","
+					+ " \"spot@private.orders.v3.api\", \"spot@public.increase.depth.v3.api@%1$s\", \"spot@public.deals.v3.api@%1$s\"] }", symbol))
 			.andEmit("{ \"id\":1}").once()
-				.waitFor(1000).andEmit(
+				.immediately().andEmit(
 						String.format(
 						"""
-						{
-						"channel": "spot@public.deals.v3.api@VPTUSDT",
-						"publicdeals": {
-						"dealsList": [
-						{
-						"price": "93220.00",
-						"quantity": "0.04438243",
-						"tradetype": 2,
-						"time": %1$d
-						}
-						],
-						"eventtype": "spot@public.deals.v3.api@100ms" 
-						},
-						"symbol": "VPTUSDT",
-						"sendtime": %1$d
-						}
-						""", new Date().getTime()))
+						{"c":"spot@public.deals.v3.api@RXUSDT","d":{"deals":[{"p":"0.00500","v":"2000.00","S":1,"t":1742385600023}],"e":"spot@public.deals.v3.api"},"s":"RXUSDT","t":1742385600025}
+						""", symbol, new Date().getTime()))
+			// TODO on new order publish WS order updates - partial and/or full fill
 			.done().once();
 		
 		server.start();
@@ -74,7 +67,7 @@ public class HttpMockResource implements QuarkusTestResourceLifecycleManager {
 		String.format(
 			"""
 			{
-			"symbol": "VPTUSDT",
+			"symbol": "%s",
 			"orderId": "06a480e69e604477bfb48dddd5f0b750",
 			"orderListId": -1,
 			"price": "0.1",
@@ -83,7 +76,7 @@ public class HttpMockResource implements QuarkusTestResourceLifecycleManager {
 			"side": "BUY",
 			"transactTime": %d
 			}	
-			""", new Date().getTime()));
+			""", symbol, new Date().getTime()));
 	}
 
 	private void mockCancelOrder() {
@@ -91,7 +84,7 @@ public class HttpMockResource implements QuarkusTestResourceLifecycleManager {
 		String.format(
 			"""
 			{
-			  "symbol": "LTCBTC",
+			  "symbol": "RXBTC",
 			  "origClientOrderId": "myOrder1",
 			  "orderId": 4,
 			  "clientOrderId": "cancelMyOrder1",
@@ -108,15 +101,7 @@ public class HttpMockResource implements QuarkusTestResourceLifecycleManager {
 	}
 
 	private void mockDepth() {
-		expectGet("/depth", () ->
-			String.format(
-			"""
-			{
-			"lastUpdateId":%d,
-			"bids":[["0.007157","10.00"],["0.007141","20.00"]],
-			"asks":[["0.007165","10.00"],["0.007168","20.00"]]
-			}
-			""", new Date().getTime()));
+		expectGet("/depth", Path.of("depth.json"));
 	}
 
 	private void mockUserDataStream(final String listenKey) {
@@ -129,70 +114,7 @@ public class HttpMockResource implements QuarkusTestResourceLifecycleManager {
 	}
 
 	private void mockExchangeInfo() {
-		expectGet("/exchangeInfo", () ->
-			String.format("""
-			{
-			"timezone":"CST",
-			"serverTime":%d,
-			"rateLimits":[],
-			"exchangeFilters":[],
-			"symbols":
-			  [
-			    {
-			      "symbol":"BROCKUSDT",
-			      "status":"1",
-			      "baseAsset":"BROCK",
-			      "baseAssetPrecision":2,
-			      "quoteAsset":"USDT",
-			      "quotePrecision":5,
-			      "quoteAssetPrecision":5,
-			      "baseCommissionPrecision":2,
-			      "quoteCommissionPrecision":5,
-			      "orderTypes":["LIMIT","MARKET","LIMIT_MAKER"],
-			      "isSpotTradingAllowed":true,
-			      "isMarginTradingAllowed":false,
-			      "quoteAmountPrecision":"1",
-			      "baseSizePrecision":"0",
-			      "permissions":["SPOT"],
-			      "filters":[],
-			      "maxQuoteAmount":"2000000",
-			      "makerCommission":"0",
-			      "takerCommission":"0.0005",
-			      "quoteAmountPrecisionMarket":"1",
-			      "maxQuoteAmountMarket":"100000",
-			      "fullName":"Bitrock",
-			      "tradeSideType":1,
-			      "st":false
-			    },
-			    {
-			      "symbol":"VPTUSDT",
-			      "status":"1",
-			      "baseAsset":"VPT",
-			      "baseAssetPrecision":2,
-			      "quoteAsset":"USDT",
-			      "quotePrecision":6,
-			      "quoteAssetPrecision":6,
-			      "baseCommissionPrecision":2,
-			      "quoteCommissionPrecision":6,
-			      "orderTypes":["LIMIT","MARKET","LIMIT_MAKER"],
-			      "isSpotTradingAllowed":true,
-			      "isMarginTradingAllowed":false,
-			      "quoteAmountPrecision":"1",
-			      "baseSizePrecision":"0",
-			      "permissions":["SPOT"],
-			      "filters":[],
-			      "maxQuoteAmount":"2000000",
-			      "makerCommission":"0",
-			      "takerCommission":"0.0005",
-			      "quoteAmountPrecisionMarket":"1",
-			      "maxQuoteAmountMarket":"100000",
-			      "fullName":"Veritas",
-			      "tradeSideType":1,
-			      "st":false
-			    }
-			  ]
-			}			      	
-			""", new Date().getTime()));
+		expectGet("/exchangeInfo", Path.of("exchangeInfo.json"));
 	}
 
 	@Override
@@ -208,28 +130,32 @@ public class HttpMockResource implements QuarkusTestResourceLifecycleManager {
 				new TestInjector.AnnotatedAndMatchesType(Inject.class, MockServer.class));
 	}
 	
-	private void expectGet(String path, Supplier<Object> body) {
+	private void expectGet(String path, SupplierHandled<Object> body) {
 		server.expect().withPath("/api/v3" + path)
 			.andReply(new MyResponseProvider(body)).always();
 	}
 
-	private void expectPost(String path, Supplier<Object> body) {
+	private void expectGet(String path, Path filePath) {
+		expectGet(path, () -> Files.readString(dataRootPath.resolve(filePath)));
+	}
+
+	private void expectPost(String path, SupplierHandled<Object> body) {
 		server.expect().post().withPath("/api/v3" + path)
 			.andReply(new MyResponseProvider(body)).always();
 	}
 
-	private void expectDelete(String path, Supplier<Object> body) {
+	private void expectDelete(String path, SupplierHandled<Object> body) {
 		server.expect().delete().withPath("/api/v3" + path)
 			.andReply(new MyResponseProvider(body)).always();
 	}
 	
 	private static class MyResponseProvider implements ResponseProvider<Object> {
 
-		private final Supplier<Object> bodySupplier;
+		private final SupplierHandled<Object> bodySupplier;
 		
 		private Headers headers = new Headers.Builder().add("Content-Type", "application/json").build();
 		
-		public MyResponseProvider(Supplier<Object> bodySupplier) {
+		public MyResponseProvider(SupplierHandled<Object> bodySupplier) {
 			this.bodySupplier = bodySupplier;
 		}
 
@@ -253,5 +179,19 @@ public class HttpMockResource implements QuarkusTestResourceLifecycleManager {
 			this.headers = headers;
 		}
 		
+	}
+	
+	private interface SupplierHandled<T> extends Supplier<T> {
+
+		
+		default T get() {
+			try {
+				return getHandled();
+			} catch (Exception e) {
+				throw new RuntimeException("", e);
+			}
+		}
+		
+		T getHandled() throws Exception;
 	}
 }

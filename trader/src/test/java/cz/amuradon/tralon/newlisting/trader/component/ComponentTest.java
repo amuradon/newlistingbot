@@ -23,17 +23,6 @@ public class ComponentTest {
 	public void prepare() {
 		// In QuarkusTest the annotation @ExtendWith(MockitoExtension.class) does not work, so doing manual way
 		mocks = MockitoAnnotations.openMocks(this);
-		
-//		when(baseUpdatesMock.chats()).thenReturn(Collections.singletonList(channelMock));
-//		when(baseUpdatesMock.updates()).thenReturn(Collections.singletonList(updateNewChannelMessageMock));
-//		when(updateNewChannelMessageMock.message()).thenReturn(baseMessageMock);
-//		when(channelMock.id()).thenReturn(wolfxChatId);
-//		when(baseMessageMock.message()).thenReturn(WOLFX_MESSAGE);
-		
-		// TODO
-		// Mock Binance server
-		//   - Mock websockets
-		// 	 - WS seems to connect to default port what is wrong
 	}
 	
 	@AfterEach
@@ -44,7 +33,10 @@ public class ComponentTest {
 	@Test
 	public void test() throws InterruptedException {
 		traderAgent.prepare();
-		Thread.sleep(60000);
+		traderAgent.placeNewBuyOrder();
+		
+		// XXX
+		Thread.sleep(10000);
 	}
 
 }

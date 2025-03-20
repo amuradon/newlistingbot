@@ -208,7 +208,8 @@ public class TraderAgent {
 		return priceScale;
 	}
 	
-	private void placeNewBuyOrder() {
+	// XXX Opened for component test for now
+	public void placeNewBuyOrder() {
 		// TODO kdyz price jeste neni nasetovana metodou vyse - muze se stat, je to async
 	
 		String clientOrderId = symbol + "-" + HexFormat.of().toHexDigits(new Date().getTime());
