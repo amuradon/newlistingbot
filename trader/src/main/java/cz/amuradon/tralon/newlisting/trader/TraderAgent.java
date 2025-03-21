@@ -256,10 +256,10 @@ public class TraderAgent {
 					Log.errorf("ERR response: %d - %s: %s, Headers: %s", status,
 							response.getStatusInfo().getReasonPhrase(), errorResponse, response.getHeaders());
 					if (ORDER_PRICE_ABOVE_LIMIT_ERR_CODE.equalsIgnoreCase(errorResponse.code())) {
-						Matcher matcher = Pattern.compile(".*(\\d+\\.\\d+)USDT").matcher(errorResponse.msg());
+						Matcher matcher = Pattern.compile(".*\\s(\\d+(\\.\\d+)?)USDT").matcher(errorResponse.msg());
 						if (matcher.find()) {
 							String maxPrice = matcher.group(1);
-							Log.infof("Resetting max price: '$s'", maxPrice);
+							Log.infof("Resetting max price: '%s'", maxPrice);
 							newOrderBuilder.price(new BigDecimal(maxPrice)).signParams();
 						}
 					} else if (status == 429) {

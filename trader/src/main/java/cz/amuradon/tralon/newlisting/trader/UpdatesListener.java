@@ -24,7 +24,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import cz.amuradon.tralon.newlisting.json.Side;
 import cz.amuradon.tralon.newlisting.json.TradeDetail;
 import io.quarkus.logging.Log;
-import io.smallrye.common.annotation.Blocking;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
@@ -91,8 +90,6 @@ public class UpdatesListener {
 		this.requestBuilder = requestBuilder;
 	}
 
-	// XXX #29 mel by blokovat cele zpracovani WS update, reseni nize nefunguje
-	// @Blocking
 	public void onMessage(String message) {
 		// FIXME ATN ihned me chytil stop loss, jinak jsem mohl udelat slusne penize
 		// FIXME ATN, i kdyz mi hitnul stop loss, tak se stale snazil umistit order, nekde je chyba

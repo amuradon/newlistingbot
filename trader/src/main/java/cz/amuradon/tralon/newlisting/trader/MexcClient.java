@@ -2,12 +2,12 @@ package cz.amuradon.tralon.newlisting.trader;
 
 import java.util.Map;
 
+import org.eclipse.microprofile.faulttolerance.Retry;
 import org.eclipse.microprofile.rest.client.annotation.ClientHeaderParam;
 import org.eclipse.microprofile.rest.client.inject.RegisterRestClient;
 import org.jboss.resteasy.reactive.RestQuery;
 
 import io.quarkus.rest.client.reactive.ClientQueryParam;
-import io.smallrye.common.annotation.Blocking;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
@@ -15,6 +15,7 @@ import jakarta.ws.rs.Path;
 
 @ClientHeaderParam(name = "Content-Type", value = "application/json")
 @RegisterRestClient(configKey = "mexc-api")
+@Retry(maxRetries = 10)
 public interface MexcClient {
 
 	@Path("/exchangeInfo")
@@ -26,15 +27,11 @@ public interface MexcClient {
 	@ClientQueryParam(name = "limit", value = "5000")
 	String depth(@RestQuery String symbol);
 	
-	// FIXME #29 presunout blocking vys, nefunguje
-	@Blocking
 	@Path("/order")
 	@POST
 	@ClientHeaderParam(name = "X-MEXC-APIKEY", value = "${mexc.apiKey}")
 	OrderResponse newOrder(@RestQuery Map<String, String> queryParams);
 	
-	// FIXME #29 presunout blocking vys, nefunguje
-	@Blocking
 	@Path("/order")
 	@DELETE
 	@ClientHeaderParam(name = "X-MEXC-APIKEY", value = "${mexc.apiKey}")

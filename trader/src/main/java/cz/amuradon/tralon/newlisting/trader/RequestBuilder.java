@@ -63,7 +63,7 @@ public class RequestBuilder {
     	return mexcClient.cancelOrder(signQueryParams(params));
     }
 
-    public final class NewOrderRequestBuilder {
+    public class NewOrderRequestBuilder {
     	
     	private static final String TIMESTAMP = "timestamp";
 		private Map<String, String> params = new LinkedHashMap<>();
