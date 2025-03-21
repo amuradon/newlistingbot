@@ -111,6 +111,12 @@ public class RequestBuilder {
     		return this;
     	}
 
+    	public NewOrderRequestBuilder recvWindow(long timestamp) {
+    		params.put("recvWindow", String.valueOf(timestamp));
+    		signed = false;
+    		return this;
+    	}
+
     	public NewOrderRequestBuilder signParams() {
     		params = signQueryParams(params);
     		signed = true;

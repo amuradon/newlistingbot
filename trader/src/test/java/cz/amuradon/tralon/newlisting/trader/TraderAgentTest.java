@@ -76,7 +76,7 @@ public class TraderAgentTest {
 
 	@ParameterizedTest
 	@MethodSource("errorResponsePriceData")
-	public void errorResponsePrice(String errorMessage) throws Exception {
+	public void errorResponsePrice(String errorMessage, String expectedMaxPrice) throws Exception {
 		WebApplicationException webApplicationExceptionMock = mock(WebApplicationException.class);
 		Response responseMock = mock(Response.class);
 		StatusType statusTypeMock = mock(StatusType.class);
@@ -92,7 +92,7 @@ public class TraderAgentTest {
 		agent.placeNewBuyOrder();
 		
 		// XXX zatim nemam, ze druhy pokus je success...
-		verify(newOrderRequestBuilderMock, times(2)).price(new BigDecimal("5"));
+		verify(newOrderRequestBuilderMock, times(2)).price(new BigDecimal(expectedMaxPrice));
 	}
 	
 	static Stream<Arguments> errorResponsePriceData() {

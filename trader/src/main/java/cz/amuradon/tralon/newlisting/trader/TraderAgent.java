@@ -217,6 +217,14 @@ public class TraderAgent {
 		LocalDateTime now = LocalDateTime.now();
 		BigDecimal price = dataHolder.getInitialBuyPrice();
 		dataHolder.setBuyClientOrderId(clientOrderId);
+		long timestamp = LocalDateTime.of(now.getYear(), now.getMonthValue(), now.getDayOfMonth(),
+				listingHour, listingMinute)
+			.atZone(ZoneOffset.systemDefault()).toInstant().toEpochMilli();
+		// XXX Temporary testing
+//		long timestamp = new Date().getTime();
+		
+		
+		int recvWindow = 60000;
 		NewOrderRequestBuilder newOrderBuilder = requestBuilder.newOrder()
 			.clientOrderId(clientOrderId)
 			.symbol(symbol)
@@ -224,12 +232,8 @@ public class TraderAgent {
 			.type("LIMIT")
 			.quantity(usdtVolume.divide(price, 2, RoundingMode.HALF_UP))
 			.price(price)
-		
-			// XXX Temporary testing
-//			.timestamp(new Date().getTime())
-			.timestamp(LocalDateTime.of(now.getYear(), now.getMonthValue(),
-				now.getDayOfMonth(), listingHour, listingMinute)
-				.atZone(ZoneOffset.systemDefault()).toInstant().toEpochMilli())
+			.recvWindow(recvWindow)
+			.timestamp(timestamp)
 			.signParams();
 		
 		// TODO muze byt az sem vsechno udelano dopredu a tady pockat na spravny cas otevreni burzy?
@@ -240,6 +244,10 @@ public class TraderAgent {
 		long msPerRequest = Math.round(Math.ceil(1000.0 / buyOrderRequestsPerSecond));
 		for (int i = 0; i < buyOrderMaxAttempts;) {
 			long currentTime = System.currentTimeMillis();
+			if (currentTime - timestamp >= recvWindow) {
+				timestamp = currentTime;
+				newOrderBuilder.timestamp(timestamp).signParams();
+			}
 			if (currentTime - previousSendTime > msPerRequest) {
 				i++;
 				previousSendTime = currentTime; 
@@ -260,7 +268,8 @@ public class TraderAgent {
 						if (matcher.find()) {
 							String maxPrice = matcher.group(1);
 							Log.infof("Resetting max price: '%s'", maxPrice);
-							newOrderBuilder.price(new BigDecimal(maxPrice)).signParams();
+							timestamp = currentTime;
+							newOrderBuilder.timestamp(timestamp).price(new BigDecimal(maxPrice)).signParams();
 						}
 					} else if (status == 429) {
 						Log.warnf("Retry after: ", response.getHeaderString("Retry-After"));
