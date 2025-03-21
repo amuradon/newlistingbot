@@ -223,7 +223,6 @@ public class TraderAgent {
 		// XXX Temporary testing
 //		long timestamp = new Date().getTime();
 		
-		
 		int recvWindow = 60000;
 		NewOrderRequestBuilder newOrderBuilder = requestBuilder.newOrder()
 			.clientOrderId(clientOrderId)
@@ -238,8 +237,6 @@ public class TraderAgent {
 		
 		// TODO muze byt az sem vsechno udelano dopredu a tady pockat na spravny cas otevreni burzy?
 
-		// TODO avoid logging? Consuming resources?
-		// Quarkus by mel podporovat async logging
 		long previousSendTime = 0;
 		long msPerRequest = Math.round(Math.ceil(1000.0 / buyOrderRequestsPerSecond));
 		for (int i = 0; i < buyOrderMaxAttempts;) {
