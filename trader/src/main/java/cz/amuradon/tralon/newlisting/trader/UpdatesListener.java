@@ -130,13 +130,16 @@ public class UpdatesListener {
 							.divide(new BigDecimal(100), dataHolder.getPriceScale(), RoundingMode.DOWN);
 				}
 				
+				// Caution: market order does not work in first (one?) minute, it is immediately cancelled
 				if (price.compareTo(stopPrice) <= 0) {
 					if (trade.timestamp() - lastStopPriceDrop > trailingStopDelayMs) {
 						requestBuilder.newOrder()
 							.symbol(symbol)
 							.side(Side.SELL)
-							.type("MARKET")
+							.type("LIMIT")
 							.quantity(baseQuantity)
+							// Emulate market order to set lowest possible limit price
+							.price(BigDecimal.ONE.scaleByPowerOfTen(-dataHolder.getPriceScale()))
 							.send();
 						positionOpened = false;
 					} else {

@@ -1,5 +1,6 @@
 package cz.amuradon.tralon.newlisting.trader;
 
+import java.math.BigDecimal;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -9,8 +10,6 @@ public class UtilTest {
 
 	@Test
 	public void test() {
-		Matcher matcher = Pattern.compile(".*(\\d+\\.\\d+)USDT").matcher("Order price cannot exceed 0.5USDT");
-		matcher.find();
-		System.out.println(matcher.group(1));
+		System.out.println(BigDecimal.ONE.scaleByPowerOfTen(-4));
 	}
 }

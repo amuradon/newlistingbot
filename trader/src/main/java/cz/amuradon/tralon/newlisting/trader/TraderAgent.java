@@ -229,6 +229,7 @@ public class TraderAgent {
 			.symbol(symbol)
 			.side(Side.BUY)
 			.type("LIMIT")
+			// FIXME quantity je spocitana na tu max price!!!
 			.quantity(usdtVolume.divide(price, 2, RoundingMode.HALF_UP))
 			.price(price)
 			.recvWindow(recvWindow)
